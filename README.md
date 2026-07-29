@@ -73,7 +73,7 @@ These packages must be installed by the user in the Python environment that Frag
 - `DeepCIP` for IRES-related scoring
 - bundled `DeepCircM6A` inference assets, which require `torch` in the Python environment running `mstocirc2 eval`
 
-`DeepCIP` is an external dependency and must be installed by the user. If it is unavailable, the main workflow still runs, but translation-potential scoring in `circ_predict.txt` is less complete.
+`DeepCIP` is an external dependency and must be installed by the user. If it is unavailable, the main workflow still runs, but translation-potential scoring in `circ_translation_evidence.tsv` is less complete.
 
 `MStoCIRC2` does not require DeepCIP to share the same Python environment as the main CLI. If your DeepCIP installation only works with a separate Python, pass that interpreter through `--deepcip-python`.
 

@@ -61,7 +61,7 @@ def add_dea_subparser(subparsers: argparse._SubParsersAction) -> argparse.Argume
         help_block(
             "Examples",
             [
-                "  mstocirc2 dea -pm peptide_matrix.tsv -cr circ_predict.txt -de design.txt -st generic -o out_dea",
+                "  mstocirc2 dea -pm peptide_matrix.tsv -cr circ_translation_evidence.tsv -de design.txt -st generic -o out_dea",
             ],
         ),
     )
@@ -78,7 +78,7 @@ def add_dea_subparser(subparsers: argparse._SubParsersAction) -> argparse.Argume
     )
     p.set_defaults(runner=run_differential_analysis)
     p.add_argument("-pm", "--peptide-matrix", metavar="<FILE>", required=True, help="Path to the peptide quantification matrix.")
-    p.add_argument("-cr", "--circrna-reference", metavar="<FILE>", required=True, help="Path to the circRNA reference table, for example 'circ_predict.txt'.")
+    p.add_argument("-cr", "--circrna-reference", metavar="<FILE>", required=True, help="Path to the circRNA reference table, for example 'circ_translation_evidence.tsv'.")
     p.add_argument("-de", "--design", metavar="<FILE>", required=True, help="Path to the sample design or metadata table (.txt or .tsv).")
     p.add_argument(
         "-o",

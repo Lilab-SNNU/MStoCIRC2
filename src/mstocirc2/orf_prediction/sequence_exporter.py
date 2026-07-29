@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import Dict, List, Any
 import logging
+
+from .bsj_truncator import normalize_orf_record_genes
+
 log = logging.getLogger(__name__)
 
 
@@ -32,6 +35,7 @@ def restore_duplicate_orfs(records: List[Dict[str, Any]]) -> List[Dict[str, Any]
 def write_final_outputs(out_circ_file: str, final_records: List[Dict[str, Any]]) -> None:
     """Write the canonical ORF outputs used by downstream modules."""
     out_dir = Path(out_circ_file)
+    final_records = normalize_orf_record_genes(final_records)
 
     with (out_dir / 'circRNA_bsj_corf.fasta').open('w', encoding='utf-8') as f:
         for r in final_records:

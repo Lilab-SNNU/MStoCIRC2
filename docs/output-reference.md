@@ -131,7 +131,8 @@ Default location:
 
 | File or pattern | Description |
 | --- | --- |
-| `circ_predict.txt` | Ranked circRNA translation-potential result table integrating peptide evidence, BSJ-crossing support, IRES prediction, m6A prediction, and a composite coding-function score. |
+| `circ_translation_evidence.tsv` | Ranked circRNA translation-potential result table integrating peptide evidence, BSJ-crossing support, IRES prediction, m6A prediction, and a composite coding-function score. |
+| `circ_peptide.tsv` | Peptide-level table of retained circRNA translation-supporting peptides after filtering, with per-sample spectral counts and BSJ-spanning flags. |
 
 ### 4.4 Per-sample and visualization outputs
 
@@ -141,9 +142,9 @@ Default location:
 | `Peptide_coverage_map/*_coverage.pdf` | Top-ranked ORF peptide-coverage plots showing where retained peptides map onto the translated cORF sequence. |
 | `circRNA_ORF_map/*_circ.pdf` | Top-ranked circular ORF structure plots showing ORF location, BSJ position, and peptide-supported regions on the circular transcript map. |
 
-## 5. Detailed Field Guide for `circ_predict.txt`
+## 5. Detailed Field Guide for `circ_translation_evidence.tsv`
 
-`circ_predict.txt` is the main reference table exported by `eval`, and it is also the default circRNA reference consumed by the `dea` module.
+`circ_translation_evidence.tsv` is the main reference table exported by `eval`, and it is also the default circRNA reference consumed by the `dea` module.
 
 ### 5.1 Column list
 
@@ -163,19 +164,21 @@ Common columns:
 10. `cORF_len`
 11. `cORF_map`
 12. `peptide_coverage`
-13. `cORF_bsj_position`
+13. `cORF_BSJ_position`
 14. `MS_count`
 15. `total_peptide_count`
 16. `unique_peptide_count`
 17. `peptide_seq`
-18. `ms_sample_evidence`
-19. `coding_function_score`
+18. `BSJ_peptide_support`
+19. `ms_sample_evidence`
+20. `coding_function_score`
 
-Optional column:
+Optional columns:
 
+- `gene`
 - `strand`
 
-`strand` is included only when `eval` can read strand information from `circ_info_omit.gff` or a compatible circRNA annotation source.
+`gene` is omitted when no ORF in the run carries a meaningful gene annotation. `strand` is included only when `eval` can read strand information from `circ_info_omit.gff` or a compatible circRNA annotation source.
 
 ### 5.2 Per-column meanings
 
@@ -194,11 +197,12 @@ Optional column:
 | `cORF_len` | Length of `cORF_seq` after excluding the terminal stop marker from the amino-acid count. |
 | `cORF_map` | Sequence-length map string showing BSJ positions and peptide-supported amino-acid positions on the cORF. |
 | `peptide_coverage` | Fraction of amino-acid positions in the cORF covered by at least one retained peptide after linear-proteome filtering. |
-| `cORF_bsj_position` | Internal BSJ position code copied from the ORF/mapping context; multiple BSJ sites are separated by `|`. |
+| `cORF_BSJ_position` | Internal BSJ position code copied from the ORF/mapping context; multiple BSJ sites are separated by `|`. |
 | `MS_count` | Number of distinct retained MS sample IDs or evidence-source IDs supporting this ORF. |
 | `total_peptide_count` | Total retained peptide-support count summed across all retained peptide entries after collapsing repeated sample-peptide observations. |
 | `unique_peptide_count` | Number of distinct retained peptide sequences supporting this ORF. |
 | `peptide_seq` | Semicolon-separated compact peptide summary showing peptide identity plus evidence counts. |
+| `BSJ_peptide_support` | Boolean flag indicating whether the ORF has at least one retained peptide that crosses the BSJ. Values are `True` or `False`. |
 | `ms_sample_evidence` | Semicolon-separated `sample_or_source_id:count` summary of aggregated evidence counts per MS sample or source identifier. |
 | `coding_function_score` | Composite ranking score used to sort circRNA ORFs by predicted coding/translation potential. Higher values indicate stronger integrated support. |
 
@@ -246,9 +250,9 @@ This means:
 - `HSLTTLTEQWIILR` is a BSJ-crossing peptide, supported by 1 distinct sample/source ID with an aggregated retained count of 6
 - `llteisslwdgcqk` is a non-BSJ-crossing peptide, supported by 1 distinct sample/source ID with an aggregated retained count of 5
 
-### 5.5 How to read `cORF_bsj_position`
+### 5.5 How to read `cORF_BSJ_position`
 
-`cORF_bsj_position` is the internal BSJ location code inherited from the ORF header or ORF mapping context and is used by MStoCIRC2 to decide whether a peptide crosses the BSJ.
+`cORF_BSJ_position` is the internal BSJ location code inherited from the ORF header or ORF mapping context and is used by MStoCIRC2 to decide whether a peptide crosses the BSJ.
 
 Important notes:
 
@@ -256,7 +260,18 @@ Important notes:
 - multiple values separated by `|` indicate repeated or multiple BSJ positions in the ORF representation
 - decimal suffixes are preserved from the internal ORF encoding and should be treated as internal BSJ-position markers rather than as standalone biological scores
 
-### 5.6 How `coding_function_score` is built
+### 5.6 How to read `BSJ_peptide_support`
+
+`BSJ_peptide_support` is a boolean summary of whether the ORF has direct BSJ-crossing peptide support.
+
+Rules:
+
+- `True`: at least one retained peptide for this ORF crosses the BSJ
+- `False`: retained peptide support exists, but none of the retained peptides cross the BSJ
+
+This column mirrors the uppercase/lowercase rule used in `peptide_seq`: if any peptide entry appears in uppercase, the ORF is marked `True`.
+
+### 5.7 How `coding_function_score` is built
 
 `coding_function_score` is a weighted ranking score rather than a direct probability.
 
@@ -270,14 +285,38 @@ It combines:
 
 In the current implementation, BSJ-crossing peptide evidence contributes more heavily than non-BSJ-crossing evidence, so ORFs with direct BSJ-spanning peptide support are intentionally prioritized.
 
-## 6. DEA Module Outputs
+## 6. Detailed Field Guide for `circ_peptide.tsv`
+
+`circ_peptide.tsv` lists each retained peptide that supports a circRNA ORF after mass-spec parsing and canonical-protein filtering. Each row corresponds to one peptide assigned to one source ORF.
+
+### 6.1 Column list
+
+1. `circ_peptide`
+2. `circ_ORF_ID`
+3. `MS_count`
+4. `spectral_count`
+5. `MS_sample_evidence`
+6. `BSJ_Spanning`
+
+### 6.2 Per-column meanings
+
+| Column | Meaning |
+| --- | --- |
+| `circ_peptide` | Uppercase amino-acid sequence of the retained peptide. |
+| `circ_ORF_ID` | Source-level circRNA ORF identifier to which the peptide is mapped. |
+| `MS_count` | Number of distinct MS sample IDs or evidence-source IDs supporting this peptide on the ORF. |
+| `spectral_count` | Total retained spectral count for this peptide on the ORF after collapsing repeated sample-peptide observations. |
+| `MS_sample_evidence` | Semicolon-separated `sample_or_source_id:count` summary for this peptide. |
+| `BSJ_Spanning` | `yes` if the peptide crosses the BSJ on the ORF; otherwise `no`. |
+
+## 7. DEA Module Outputs
 
 Default location:
 
 - direct `dea` run: the DEA output directory
 - integrated `quant`: `<root>/dea/`
 
-### 6.1 Core quantitative tables
+### 7.1 Core quantitative tables
 
 | File or pattern | Description |
 | --- | --- |
@@ -287,7 +326,7 @@ Default location:
 | `protein_quant_imputed.tsv` | Imputed protein-level matrix generated after missing-value handling according to the selected DEA strategy preset. |
 | `dea_results.tsv` | Main differential-expression result table containing effect sizes, test statistics, P-values, adjusted P-values, and circRNA-related annotations. |
 
-### 6.2 Visualization files
+### 7.2 Visualization files
 
 | File or pattern | Description |
 | --- | --- |
@@ -297,7 +336,7 @@ Default location:
 | `enrichment_<group>_KEGG_barplot.(pdf|png)` | KEGG enrichment bar plots for the proxy-gene set associated with circRNA candidates upregulated in the specified group. |
 | `enrichment_<group>_KEGG_dotplot.(pdf|png)` | KEGG enrichment dot plots for the proxy-gene set associated with circRNA candidates upregulated in the specified group. |
 
-### 6.3 Correlation and enrichment tables
+### 7.3 Correlation and enrichment tables
 
 | File or pattern | Description |
 | --- | --- |
@@ -308,7 +347,7 @@ Default location:
 | `enrichment_<group>_go_MF.tsv` | GO molecular-function enrichment result table for the specified group. |
 | `enrichment_<group>_kegg.tsv` | KEGG enrichment result table for the specified group. |
 
-### 6.4 Metadata and conditional outputs
+### 7.4 Metadata and conditional outputs
 
 | File or pattern | Description |
 | --- | --- |

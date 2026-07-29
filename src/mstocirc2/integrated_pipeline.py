@@ -36,22 +36,27 @@ def _debug_search_tree(root: Path) -> dict[str, object]:
 
 
 def _require_eval_result(eval_dir: Path) -> Path:
-    circ_predict = eval_dir / "circ_predict.txt"
-    if not circ_predict.exists():
+    circ_translation_evidence = eval_dir / "circ_translation_evidence.tsv"
+    if not circ_translation_evidence.exists():
         raise MStoCIRC2Error(
-            f"Translation evaluation finished without generating '{circ_predict.name}' in '{eval_dir}'."
+            f"Translation evaluation finished without generating '{circ_translation_evidence.name}' in '{eval_dir}'."
+        )
+    circ_peptide = eval_dir / "circ_peptide.tsv"
+    if not circ_peptide.exists():
+        raise MStoCIRC2Error(
+            f"Translation evaluation finished without generating '{circ_peptide.name}' in '{eval_dir}'."
         )
 
-    with circ_predict.open("r", encoding="utf-8", errors="ignore") as handle:
+    with circ_translation_evidence.open("r", encoding="utf-8", errors="ignore") as handle:
         header = handle.readline()
         first_data_row = handle.readline()
 
     if not header.strip() or not first_data_row.strip():
         raise MStoCIRC2Error(
-            f"Translation evaluation produced an empty '{circ_predict.name}' in '{eval_dir}'."
+            f"Translation evaluation produced an empty '{circ_translation_evidence.name}' in '{eval_dir}'."
         )
 
-    return circ_predict
+    return circ_translation_evidence
 
 
 def _namespace_to_argv(namespace: argparse.Namespace, keys: Iterable[str]) -> dict[str, object]:
@@ -482,7 +487,7 @@ def _run_dea_stage(
 ) -> Path:
     dea_dir = Path(dea_outdir)
     data_type = detect_manifest_data_type(args.manifest)
-    circ_predict = _require_eval_result(eval_dir)
+    circ_translation_evidence = _require_eval_result(eval_dir)
     peptide_matrix = discover_fragpipe_peptide_table(
         search_dir,
         prefer_quant=data_type == "DIA",
@@ -512,7 +517,7 @@ def _run_dea_stage(
         )
     dea_args = argparse.Namespace(
         peptide_matrix=str(peptide_matrix),
-        circrna_reference=str(circ_predict),
+        circrna_reference=str(circ_translation_evidence),
         design=str(design_path),
         output_dir=dea_outdir,
         strategy=args.strategy,
@@ -556,7 +561,7 @@ def run_non_quant_pipeline(args: argparse.Namespace) -> int:
         search_dir=search_dir,
         eval_outdir=eval_outdir,
     )
-    _log_stage_complete(3, 3, "Translation Evaluation", eval_dir, eval_dir / "circ_predict.txt")
+    _log_stage_complete(3, 3, "Translation Evaluation", eval_dir, eval_dir / "circ_translation_evidence.tsv")
     return 0
 
 
@@ -593,7 +598,7 @@ def run_quant_pipeline(args: argparse.Namespace) -> int:
         search_dir=search_dir,
         eval_outdir=eval_outdir,
     )
-    _log_stage_complete(3, 4, "Translation Evaluation", eval_dir, eval_dir / "circ_predict.txt")
+    _log_stage_complete(3, 4, "Translation Evaluation", eval_dir, eval_dir / "circ_translation_evidence.tsv")
     dea_outdir = _resolve_stage_output(root_out, args.dea_output_dir, "dea")
     _log_stage_banner(4, 4, "Differential Expression Analysis", dea_outdir)
     if len(conditions) < 2:

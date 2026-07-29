@@ -62,10 +62,10 @@ def _resolve_key_result_path(args: argparse.Namespace, output_path: Path | None)
     candidates: dict[str, list[Path]] = {
         "orf": [output_path / "circRNA_bsj_corf.fasta"],
         "search": [output_path / "fragpipe_input.fp-manifest", output_path / "fragpipe.workflow"],
-        "eval": [output_path / "circ_predict.txt"],
+        "eval": [output_path / "circ_translation_evidence.tsv"],
         "dea": [output_path / "run_metadata.json"],
-        "nonquant": [output_path / "eval" / "circ_predict.txt"],
-        "quant": [output_path / "eval" / "circ_predict.txt", output_path / "dea" / "run_metadata.json"],
+        "nonquant": [output_path / "eval" / "circ_translation_evidence.tsv"],
+        "quant": [output_path / "eval" / "circ_translation_evidence.tsv", output_path / "dea" / "run_metadata.json"],
     }
     for candidate in candidates.get(command, []):
         if candidate.exists():

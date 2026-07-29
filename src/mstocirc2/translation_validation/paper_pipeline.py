@@ -20,6 +20,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 
 from ..core import MStoCIRC2Error
+from ..orf_prediction.bsj_truncator import extract_gene_from_orf_header, is_meaningful_gene
 from .evidence_scorer import build_source_bsj_location, is_peptide_crossing_bsj, parse_bsj_location
 from .legacy_predictor import batch_ires_predict, batch_m6a_predict
 from .linear_filter import batch_diamond_alignment_filter, tsv_remove_line_protaid
@@ -212,7 +213,7 @@ def circ_orf_tsv_peptide_map(
     dic_circ_orf_bsj_location: dict[str, str],
 ) -> tuple[Any, ...]:
     if circ_orf_id not in dic_id_peptide:
-        return "none", "none", "none", "none", "none", "none", "none", {}, 0, ""
+        return "none", "none", "none", "none", "none", "none", "none", {}, 0, "", []
 
     mgf_pep_score_assemble = dic_id_peptide[circ_orf_id]
     dic_pro_sore: dict[str, dict[str, int]] = {}
@@ -328,6 +329,20 @@ def circ_orf_tsv_peptide_map(
             "ms_count": len(stats_non["ms_ids"]),
         },
     }
+    peptide_rows: list[tuple[str, str, int, int, str, str]] = []
+    for peptide in sorted(all_unique_peps):
+        total_count = sum(dic_pro_sore[peptide].values())
+        ms_hit_count = len(dic_pro_ms_counts.get(peptide, set()))
+        ms_evidence = ";".join(
+            f"{mgf_id}:{dic_pro_sore[peptide][mgf_id]}"
+            for mgf_id in sorted(dic_pro_sore[peptide].keys())
+        )
+        if ms_evidence:
+            ms_evidence += ";"
+        bsj_spanning = "yes" if peptide in stats_cross["unique_pep"] else "no"
+        peptide_rows.append(
+            (peptide.upper(), circ_orf_id, ms_hit_count, total_count, ms_evidence, bsj_spanning)
+        )
     return (
         pro_number_score,
         merged_peptide_bsj_multiple,
@@ -339,10 +354,35 @@ def circ_orf_tsv_peptide_map(
         detailed_stats,
         unique_peptide_count,
         peptide_seq_str,
+        peptide_rows,
     )
 
 
-def calculate_and_write_scores(results_buffer: list[dict[str, Any]], file_path_out: str, has_info: bool) -> None:
+def write_circ_peptide_tsv(peptide_rows: list[tuple[str, str, int, int, str, str]], file_path_out: str) -> None:
+    header = "\t".join(
+        [
+            "circ_peptide",
+            "circ_ORF_ID",
+            "MS_count",
+            "spectral_count",
+            "MS_sample_evidence",
+            "BSJ_Spanning",
+        ]
+    )
+    with Path(file_path_out).open("w", encoding="utf-8") as handle:
+        handle.write(header + "\n")
+        for peptide, orf_id, ms_count, spectral_count, ms_evidence, bsj_spanning in peptide_rows:
+            handle.write(
+                f"{peptide}\t{orf_id}\t{ms_count}\t{spectral_count}\t{ms_evidence}\t{bsj_spanning}\n"
+            )
+
+
+def calculate_and_write_scores(
+    results_buffer: list[dict[str, Any]],
+    file_path_out: str,
+    has_info: bool,
+    include_gene: bool = True,
+) -> None:
     def get_detail_bucket(item: dict[str, Any], key: str) -> dict[str, int]:
         detailed_stats = item["stats"].get("detailed_stats") or {}
         bucket = detailed_stats.get(key) or {}
@@ -390,7 +430,9 @@ def calculate_and_write_scores(results_buffer: list[dict[str, Any]], file_path_o
         log_ratio = math.log(1 + val) / math.log(1 + max_val)
         return 0.7 * hill + 0.3 * log_ratio
 
-    header_cols = ["circ_ORF_ID", "search_ORF_IDs", "circRNA_ID", "gene"]
+    header_cols = ["circ_ORF_ID", "search_ORF_IDs", "circRNA_ID"]
+    if include_gene:
+        header_cols.append("gene")
     if has_info:
         header_cols.append("strand")
     header_cols.extend(
@@ -403,11 +445,12 @@ def calculate_and_write_scores(results_buffer: list[dict[str, Any]], file_path_o
             "cORF_len",
             "cORF_map",
             "peptide_coverage",
-            "cORF_bsj_position",
+            "cORF_BSJ_position",
             "MS_count",
             "total_peptide_count",
             "unique_peptide_count",
             "peptide_seq",
+            "BSJ_peptide_support",
             "ms_sample_evidence",
             "coding_function_score",
         ]
@@ -433,7 +476,7 @@ def calculate_and_write_scores(results_buffer: list[dict[str, Any]], file_path_o
 
         parts = item["data_row"].strip().split("\t")
         if not has_info:
-            parts.pop(4)
+            parts.pop(4 if include_gene else 3)
         base_parts = parts[: len(header_cols) - 1]
         base_line = "\t".join(base_parts)
         scored_rows.append((total_score, f"{base_line}\t{total_score:.4f}\n"))
@@ -452,6 +495,7 @@ def process_orf(
     precomputed: dict[str, dict[str, Any]],
     dic_m6a_results: dict[str, int],
     run_ires: bool,
+    include_gene: bool = True,
 ) -> dict[str, Any] | None:
     data = precomputed.get(circ_orf_id)
     if not data:
@@ -466,16 +510,38 @@ def process_orf(
     weighted_ires_score = 0.5 * val_p1 + 0.3 * val_p2 + 0.2 * val_p3
     circ_m6a_count = str(dic_m6a_results.get(circ_orf_id, "0"))
     orf_len = len(circ_orf_seq.strip("*"))
+    cross_unique_pep = int((data["detailed_stats"].get("cross") or {}).get("unique_pep", 0))
+    bsj_peptide_support = "True" if cross_unique_pep > 0 else "False"
     ires_str = "\t".join(
         f"{value:.4f}" if value >= 0 else "na"
         for value in (p1, p2, p3)
     )
-    row_circ_predict = (
-        f"{circ_orf_id}\t{data['search_orf_ids']}\t{data['circ_info_id']}\t{data['gene']}\t{data['circ_strand']}\t{ires_str}\t"
-        f"{circ_m6a_count}\t{circ_orf_seq}\t{orf_len}\t{data['marge_peptide_bsj_multiple']}\t{data['corf_peptide_ratio']:.4f}\t"
-        f"{data['bsj_location']}\t{data['raw_sum']}\t{data['number_all']}\t{data['unique_peptide_count']}\t{data['peptide_seq_str']}\t"
-        f"{data['mgf_score_all']}"
+    row_parts = [
+        circ_orf_id,
+        data["search_orf_ids"],
+        data["circ_info_id"],
+    ]
+    if include_gene:
+        row_parts.append(data["gene"])
+    row_parts.extend(
+        [
+            data["circ_strand"],
+            ires_str,
+            circ_m6a_count,
+            circ_orf_seq,
+            str(orf_len),
+            data["marge_peptide_bsj_multiple"],
+            f"{data['corf_peptide_ratio']:.4f}",
+            data["bsj_location"],
+            str(data["raw_sum"]),
+            str(data["number_all"]),
+            str(data["unique_peptide_count"]),
+            data["peptide_seq_str"],
+            bsj_peptide_support,
+            data["mgf_score_all"],
+        ]
     )
+    row_circ_predict = "\t".join(row_parts)
     try:
         m_val = float(circ_m6a_count)
     except Exception:
@@ -600,12 +666,15 @@ def draw_msgf_second(file_input: str, excellent_count: int, file_out: str, dic_i
 
     try:
         idx_corf_id = header_parts.index("circ_ORF_ID")
-        idx_circ_gene = header_parts.index("gene")
         idx_corf_seq = header_parts.index("cORF_seq")
         idx_seq_cov = header_parts.index("peptide_coverage")
-        idx_bsj_pos = header_parts.index("cORF_bsj_position")
+        idx_bsj_pos = header_parts.index("cORF_BSJ_position")
     except ValueError:
-        idx_corf_id, idx_circ_gene, idx_corf_seq, idx_seq_cov, idx_bsj_pos = 0, 3, 8, 10, 11
+        return
+    try:
+        idx_circ_gene = header_parts.index("gene")
+    except ValueError:
+        idx_circ_gene = None
 
     dic_stripped_to_full = {key.split("(")[0]: key for key in dic_id_peptide if key.split("(")[0] != key}
     global_max_pep_count, global_max_ms_count = calculate_global_max_stats(
@@ -620,10 +689,13 @@ def draw_msgf_second(file_input: str, excellent_count: int, file_out: str, dic_i
 
     for _, line_input in top_entries:
         parts = line_input.strip().split("\t")
-        if len(parts) <= max(idx_corf_id, idx_circ_gene, idx_corf_seq, idx_seq_cov, idx_bsj_pos):
+        required_indices = [idx_corf_id, idx_corf_seq, idx_seq_cov, idx_bsj_pos]
+        if idx_circ_gene is not None:
+            required_indices.append(idx_circ_gene)
+        if len(parts) <= max(required_indices):
             continue
         corf_id = parts[idx_corf_id]
-        circ_gene = parts[idx_circ_gene]
+        circ_gene = parts[idx_circ_gene] if idx_circ_gene is not None else "NA"
         corf_seq = parts[idx_corf_seq]
         try:
             float_circ_seq_coverage = float(parts[idx_seq_cov]) * 100
@@ -759,8 +831,9 @@ def draw_msgf_second(file_input: str, excellent_count: int, file_out: str, dic_i
         y_max = 2 if corf_list_int <= 20 else corf_list_int * 0.1
         ax.set_ylim(ymax=corf_list_int + y_max, ymin=-y_max * 2)
         ax.text(1, -y_max / 2, f"cORF:{corf_id}", fontsize=12)
-        ax.text(1, -y_max, f"Gene_name:{circ_gene}", fontsize=12)
-        ax.text(1, -y_max / 0.66, f"Sequence cover:{float_circ_seq_coverage:.2f}%", fontsize=12)
+        if idx_circ_gene is not None:
+            ax.text(1, -y_max, f"Gene_name:{circ_gene}", fontsize=12)
+        ax.text(1, -y_max / (0.66 if idx_circ_gene is not None else 1), f"Sequence cover:{float_circ_seq_coverage:.2f}%", fontsize=12)
         ax.axis("off")
         match = re.search(r"(.*-ORF\d+)_", corf_id)
         save_name = match.group(1) + "_coverage" if match else corf_id.replace("|", "_").replace(":", "_")
@@ -781,19 +854,25 @@ def draw_circ_corf(
         return
 
     try:
-        idx_circ_gene = header_parts.index("gene")
         idx_full_orf = header_parts.index("circ_ORF_ID")
         idx_corf_seq = header_parts.index("cORF_seq")
         idx_corf_map = header_parts.index("cORF_map")
     except ValueError:
-        idx_circ_gene, idx_full_orf, idx_corf_seq, idx_corf_map = 3, 0, 8, 10
+        return
+    try:
+        idx_circ_gene = header_parts.index("gene")
+    except ValueError:
+        idx_circ_gene = None
 
     temp_request_map: dict[str, list[str]] = {}
     for _, row_circ_predict in top_entries:
         parts = row_circ_predict.strip().split("\t")
-        if len(parts) <= max(idx_circ_gene, idx_full_orf, idx_corf_seq, idx_corf_map):
+        required_indices = [idx_full_orf, idx_corf_seq, idx_corf_map]
+        if idx_circ_gene is not None:
+            required_indices.append(idx_circ_gene)
+        if len(parts) <= max(required_indices):
             continue
-        circ_gene = parts[idx_circ_gene]
+        circ_gene = parts[idx_circ_gene] if idx_circ_gene is not None else ""
         full_orf_id = parts[idx_full_orf]
         circ_corf_seq = parts[idx_corf_seq]
         circ_corf_seq_x = parts[idx_corf_map]
@@ -978,7 +1057,7 @@ def run_translation_validation(
                     dic_id_peptide = cleaned_dic_id_peptide
 
     dic_id_peptide, dic_source_search_orfs = map_to_source_orfs(dic_id_peptide, dic_output_to_source)
-    dic_circ_orf_bsj_location = build_source_bsj_location(circ_orf, circ_mapping or "")
+    dic_circ_orf_bsj_location = build_source_bsj_location(circ_orf, circ_mapping or "", circ_seq)
     dic_circ_strand = circ_forward_reverse(circ_info_omit_file)
     dic_orf_seqs_fallback = load_orf_fallback_sequences(circ_orf)
     known_orf_ids = set(dic_source_aa.keys()) | set(dic_orf_seqs_fallback.keys())
@@ -987,6 +1066,7 @@ def run_translation_validation(
     _raise_for_unmatched_search_ids(valid_source_ids, known_orf_ids)
     precomputed: dict[str, dict[str, Any]] = {}
     candidate_orfs: list[tuple[str, str]] = []
+    all_peptide_rows: list[tuple[str, str, int, int, str, str]] = []
     for source_header in valid_source_ids:
         source_seq = dic_source_aa.get(source_header, "")
         if not source_seq:
@@ -1011,12 +1091,13 @@ def run_translation_validation(
             detailed_stats,
             unique_peptide_count,
             peptide_seq_str,
+            peptide_rows,
         ) = circ_orf_tsv_peptide_map(source_header, source_seq, dic_id_peptide, dic_circ_orf_bsj_location)
         if marge_peptide_bsj_multiple == "none" and corf_peptide_ratio == "none":
             continue
+        all_peptide_rows.extend(peptide_rows)
 
-        colon_parts = source_header.split(":")
-        gene = colon_parts[1] if len(colon_parts) >= 3 and colon_parts[1] else "unknown"
+        gene = extract_gene_from_orf_header(source_header)
         base_id = source_header.split("(")[0] if "(" in source_header else source_header
         orf_base = base_id.split("-")[0] if "-" in base_id else base_id
         circ_info_id = extract_circ_info_id(orf_base)
@@ -1044,7 +1125,7 @@ def run_translation_validation(
     if not candidate_orfs:
         raise MStoCIRC2Error(
             "Translation evaluation found no circRNA ORFs with retained peptide evidence after "
-            "mass-spec parsing and canonical-protein filtering, so `circ_predict.txt` was not generated."
+            "mass-spec parsing and canonical-protein filtering, so `circ_translation_evidence.tsv` was not generated."
         )
 
     ms_orf_report_file = output_dir / "ms_sample_orf_identification.txt"
@@ -1085,20 +1166,35 @@ def run_translation_validation(
         dic_circ_id_seq,
     ) if deepcircm6a_path else {}
 
+    include_gene = any(is_meaningful_gene(data["gene"]) for data in precomputed.values())
     results_buffer = []
     for orf_id, orf_seq in candidate_orfs:
-        result = process_orf(orf_id, orf_seq, dic_ires_results, precomputed, dic_m6a_results, run_ires)
+        result = process_orf(
+            orf_id,
+            orf_seq,
+            dic_ires_results,
+            precomputed,
+            dic_m6a_results,
+            run_ires,
+            include_gene=include_gene,
+        )
         if result:
             results_buffer.append(result)
 
-    circ_predict_path = output_dir / "circ_predict.txt"
+    circ_translation_evidence_path = output_dir / "circ_translation_evidence.tsv"
+    circ_peptide_path = output_dir / "circ_peptide.tsv"
     has_info = bool(circ_info_omit_file and Path(circ_info_omit_file).exists())
-    calculate_and_write_scores(results_buffer, str(circ_predict_path), has_info)
-    if not circ_predict_path.exists():
+    calculate_and_write_scores(results_buffer, str(circ_translation_evidence_path), has_info, include_gene)
+    write_circ_peptide_tsv(all_peptide_rows, str(circ_peptide_path))
+    if not circ_translation_evidence_path.exists():
         raise MStoCIRC2Error(
-            f"Translation evaluation did not generate the expected result file: '{circ_predict_path}'."
+            f"Translation evaluation did not generate the expected result file: '{circ_translation_evidence_path}'."
         )
-    draw_msgf_second(str(circ_predict_path), 10, str(output_dir), dic_id_peptide)
-    draw_circ_corf(str(output_dir), str(circ_predict_path), dic_output_to_source, dic_circ_id_seq)
-    log.info("Evaluation stage completed: %s", circ_predict_path)
+    if not circ_peptide_path.exists():
+        raise MStoCIRC2Error(
+            f"Translation evaluation did not generate the expected result file: '{circ_peptide_path}'."
+        )
+    draw_msgf_second(str(circ_translation_evidence_path), 10, str(output_dir), dic_id_peptide)
+    draw_circ_corf(str(output_dir), str(circ_translation_evidence_path), dic_output_to_source, dic_circ_id_seq)
+    log.info("Evaluation stage completed: %s", circ_translation_evidence_path)
     return 0
