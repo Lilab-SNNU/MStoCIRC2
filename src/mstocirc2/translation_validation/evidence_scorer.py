@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Set
 
+from ..orf_prediction.bsj_truncator import HEADER_RE
 from .mass_spec_parser import extract_circ_info_id
 
 
@@ -46,6 +47,12 @@ def is_standard_bsj_string(bsj: str | None) -> bool:
 
 
 def extract_bsj_token_from_header(header: str) -> str | None:
+    header_token = header.split()[0]
+    match = HEADER_RE.match(header_token)
+    if match:
+        bps = (match.group('bps') or '').strip()
+        if bps and re.match(r'^[\d.|]+$', bps) and '.' in bps:
+            return bps
     parts = header.split(':')
     if len(parts) < 2:
         return None
@@ -136,12 +143,6 @@ def build_source_bsj_location(
 ) -> Dict[str, str]:
     dic_circ_len = _load_circ_len_map(circ_seq)
     header_samples: List[str] = []
-    circ_orf_path = Path(circ_orf)
-    if circ_orf_path.exists():
-        with circ_orf_path.open('r', encoding='utf-8', errors='ignore') as handle:
-            for line in handle:
-                if line.startswith('>'):
-                    header_samples.append(line.strip()[1:].split()[0])
     circ_mapping_path = Path(circ_mapping) if circ_mapping else None
     if circ_mapping_path and circ_mapping_path.exists():
         with circ_mapping_path.open('r', encoding='utf-8', errors='ignore') as handle:
@@ -150,6 +151,13 @@ def build_source_bsj_location(
                 cols = line.strip('\n').split('\t')
                 if len(cols) >= 2:
                     header_samples.append(cols[1].split()[0])
+    else:
+        circ_orf_path = Path(circ_orf)
+        if circ_orf_path.exists():
+            with circ_orf_path.open('r', encoding='utf-8', errors='ignore') as handle:
+                for line in handle:
+                    if line.startswith('>'):
+                        header_samples.append(line.strip()[1:].split()[0])
 
     standard_count = sum(
         1 for header in header_samples if is_standard_bsj_string(extract_bsj_token_from_header(header))
@@ -157,13 +165,6 @@ def build_source_bsj_location(
     force_compute_all = bool(header_samples) and standard_count == 0
 
     dic_bsj: Dict[str, str] = {}
-    if circ_orf_path.exists():
-        with circ_orf_path.open('r', encoding='utf-8', errors='ignore') as handle:
-            for line in handle:
-                if line.startswith('>'):
-                    header = line.strip()[1:].split()[0]
-                    base_id = header.split('(')[0]
-                    dic_bsj[base_id] = _resolve_bsj_for_header(header, dic_circ_len, force_compute_all)
     if circ_mapping_path and circ_mapping_path.exists():
         with circ_mapping_path.open('r', encoding='utf-8', errors='ignore') as handle:
             handle.readline()
@@ -174,10 +175,23 @@ def build_source_bsj_location(
                 source_header = cols[1].split()[0]
                 source_base = source_header.split('(')[0]
                 src_bsj = _resolve_bsj_for_header(source_header, dic_circ_len, force_compute_all)
-                dic_bsj[source_base] = src_bsj
+                if src_bsj is not None:
+                    dic_bsj[source_base] = src_bsj
+                elif source_base not in dic_bsj:
+                    out_base = cols[0].split('(')[0]
+                    dic_bsj[source_base] = dic_bsj.get(out_base, '0')
                 out_base = cols[0].split('(')[0]
-                if out_base not in dic_bsj:
-                    dic_bsj[out_base] = src_bsj
+                if out_base not in dic_bsj and source_base in dic_bsj:
+                    dic_bsj[out_base] = dic_bsj[source_base]
+    else:
+        circ_orf_path = Path(circ_orf)
+        if circ_orf_path.exists():
+            with circ_orf_path.open('r', encoding='utf-8', errors='ignore') as handle:
+                for line in handle:
+                    if line.startswith('>'):
+                        header = line.strip()[1:].split()[0]
+                        base_id = header.split('(')[0]
+                        dic_bsj[base_id] = _resolve_bsj_for_header(header, dic_circ_len, force_compute_all)
     return dic_bsj
 
 

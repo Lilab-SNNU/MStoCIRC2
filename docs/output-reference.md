@@ -163,7 +163,7 @@ Common columns:
 9. `cORF_seq`
 10. `cORF_len`
 11. `cORF_map`
-12. `peptide_coverage`
+12. `BSJ_peptide_coverage`
 13. `cORF_BSJ_position`
 14. `MS_count`
 15. `total_peptide_count`
@@ -193,10 +193,10 @@ Optional columns:
 | `IRES_Up150_Center` | DeepCIP-derived IRES-related score for the sequence window centered farther upstream around the ORF start context. |
 | `IRES_Down_Stop` | DeepCIP-derived IRES-related score for the sequence window anchored downstream toward the ORF stop-side context. |
 | `m6A_Count` | Count of predicted m6A-positive windows associated with the ORF from bundled DeepCircM6A inference. |
-| `cORF_seq` | Amino-acid sequence of the candidate circRNA ORF used for peptide mapping and ranking. |
-| `cORF_len` | Length of `cORF_seq` after excluding the terminal stop marker from the amino-acid count. |
-| `cORF_map` | Sequence-length map string showing BSJ positions and peptide-supported amino-acid positions on the cORF. |
-| `peptide_coverage` | Fraction of amino-acid positions in the cORF covered by at least one retained peptide after linear-proteome filtering. |
+| `cORF_seq` | Full source amino-acid sequence of the candidate circRNA ORF from `circRNA_ORF_mapping.tsv`. |
+| `cORF_len` | Length of the full source `cORF_seq` after excluding the terminal stop marker from the amino-acid count. |
+| `cORF_map` | Sequence-length map string on the full source ORF showing BSJ positions and peptide-supported amino-acid positions. |
+| `BSJ_peptide_coverage` | Fraction of amino-acid positions in the BSJ-truncated search ORF (default ±24 amino acids around the BSJ in `circRNA_bsj_corf.fasta`) covered by at least one retained peptide. |
 | `cORF_BSJ_position` | Internal BSJ position code copied from the ORF/mapping context; multiple BSJ sites are separated by `|`. |
 | `MS_count` | Number of distinct retained MS sample IDs or evidence-source IDs supporting this ORF. |
 | `total_peptide_count` | Total retained peptide-support count summed across all retained peptide entries after collapsing repeated sample-peptide observations. |
@@ -279,7 +279,7 @@ It combines:
 
 - IRES support
 - m6A support
-- peptide coverage on the ORF
+- BSJ-truncated peptide coverage on the ORF
 - BSJ-crossing peptide evidence
 - non-BSJ-crossing peptide evidence
 

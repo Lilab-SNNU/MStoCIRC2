@@ -1,5 +1,3 @@
-"""Publication-aligned translation validation pipeline rebuilt from the original BM3 script."""
-
 from __future__ import annotations
 
 import logging
@@ -21,7 +19,11 @@ from matplotlib.lines import Line2D
 
 from ..core import MStoCIRC2Error
 from ..orf_prediction.bsj_truncator import extract_gene_from_orf_header, is_meaningful_gene
-from .evidence_scorer import build_source_bsj_location, is_peptide_crossing_bsj, parse_bsj_location
+from .evidence_scorer import (
+    build_source_bsj_location,
+    is_peptide_crossing_bsj,
+    parse_bsj_location,
+)
 from .legacy_predictor import batch_ires_predict, batch_m6a_predict
 from .linear_filter import batch_diamond_alignment_filter, tsv_remove_line_protaid
 from .mass_spec_parser import process_ms_directory
@@ -63,7 +65,6 @@ def extract_circ_info_id(orf_base: str) -> str:
 
 
 def normalize_orf_header(header: str) -> str:
-    """Normalize search/mapping ORF identifiers to the shared circ header form."""
     match = _CIRC_ORF_HEADER_RE.search(header)
     return match.group(1) if match else header
 
@@ -180,6 +181,51 @@ def load_orf_fallback_sequences(circ_orf: str) -> dict[str, str]:
     return dic_orf_seqs_fallback
 
 
+def resolve_full_orf_sequence(source_header: str, dic_source_aa: dict[str, str]) -> str:
+    return dic_source_aa.get(source_header, "")
+
+
+def resolve_bsj_truncated_orf_sequence(
+    source_header: str,
+    dic_orf_seqs_fallback: dict[str, str],
+    dic_source_search_orfs: dict[str, list[str]],
+) -> str:
+    seq = dic_orf_seqs_fallback.get(source_header, "")
+    if not seq:
+        seq = dic_orf_seqs_fallback.get(source_header.split("(")[0], "")
+    if not seq:
+        for out_id in dic_source_search_orfs.get(source_header, []):
+            seq = dic_orf_seqs_fallback.get(out_id, "") or dic_orf_seqs_fallback.get(out_id.split("(")[0], "")
+            if seq:
+                break
+    return seq
+
+
+def compute_peptide_coverage_on_corf(corf: str, peptide_entries_str: str) -> float:
+    corf_clean = corf.strip("*").upper()
+    corf_clean_il = corf_clean.replace("I", "L")
+    corf_s = len(corf_clean)
+    if corf_s == 0:
+        return 0.0
+    coverage_mask = [False] * corf_s
+    entries = [x.strip().split("###") for x in peptide_entries_str.strip(";").split(";") if x.strip()]
+    for parts in entries:
+        if len(parts) < 2:
+            continue
+        peptide = parts[1].upper()
+        peptide_il = peptide.replace("I", "L")
+        start = 0
+        while True:
+            idx = corf_clean_il.find(peptide_il, start)
+            if idx == -1:
+                break
+            end = idx + len(peptide)
+            for k in range(idx, min(end, corf_s)):
+                coverage_mask[k] = True
+            start = idx + 1
+    return sum(coverage_mask) / corf_s
+
+
 def _matches_known_orf(source_header: str, known_orf_ids: set[str]) -> bool:
     normalized_header = normalize_orf_header(source_header)
     if normalized_header in known_orf_ids:
@@ -213,7 +259,7 @@ def circ_orf_tsv_peptide_map(
     dic_circ_orf_bsj_location: dict[str, str],
 ) -> tuple[Any, ...]:
     if circ_orf_id not in dic_id_peptide:
-        return "none", "none", "none", "none", "none", "none", "none", {}, 0, "", []
+        return "none", "none", "none", "none", "none", "none", {}, 0, "", []
 
     mgf_pep_score_assemble = dic_id_peptide[circ_orf_id]
     dic_pro_sore: dict[str, dict[str, int]] = {}
@@ -225,7 +271,6 @@ def circ_orf_tsv_peptide_map(
     corf_clean = corf.strip("*").upper()
     corf_clean_il = corf_clean.replace("I", "L")
     corf_s = len(corf_clean)
-    coverage_mask = [False] * corf_s
     coverage_map = ["x"] * corf_s
     bsj_location_str = dic_circ_orf_bsj_location.get(circ_orf_id.split("(")[0], "0")
     bsj_list = parse_bsj_location(bsj_location_str)
@@ -254,8 +299,6 @@ def circ_orf_tsv_peptide_map(
             if idx == -1:
                 break
             end = idx + len(peptide)
-            for k in range(idx, min(end, corf_s)):
-                coverage_mask[k] = True
             current_instance_crossing = is_peptide_crossing_bsj(idx, end, bsj_list)
             if current_instance_crossing:
                 is_crossing = True
@@ -293,8 +336,6 @@ def circ_orf_tsv_peptide_map(
     peptide_seq_str = ";".join(unique_peptide_seqs_list)
     mgf_score_all = "".join(f"{k}:{v};" for k, v in dic_mgf_score.items())
     raw_sum = len(set(list_mgf_id))
-    covered_len = sum(coverage_mask)
-    corf_peptide_ratio = covered_len / corf_s if corf_s > 0 else 0.0
     merged_peptide_multiple = "".join(coverage_map)
     if "*" in corf:
         merged_peptide_multiple += "*"
@@ -346,7 +387,6 @@ def circ_orf_tsv_peptide_map(
     return (
         pro_number_score,
         merged_peptide_bsj_multiple,
-        corf_peptide_ratio,
         bsj_location_str,
         raw_sum,
         number_all,
@@ -407,9 +447,6 @@ def calculate_and_write_scores(
     n_p_max = max(non_pep_vals) if non_pep_vals else 0
     n_u_max = max(non_uni_vals) if non_uni_vals else 0
     n_m_max = max(non_ms_vals) if non_ms_vals else 0
-    all_orf_lengths = [d["stats"]["L"] for d in results_buffer]
-    median_orf_len = float(np.median(all_orf_lengths)) if all_orf_lengths else 1.0
-
     def get_nonzero_percentile(values: list[int], q: int = 10, default: float = 1.0) -> float:
         nonzero = [v for v in values if v > 0]
         if not nonzero:
@@ -444,7 +481,7 @@ def calculate_and_write_scores(
             "cORF_seq",
             "cORF_len",
             "cORF_map",
-            "peptide_coverage",
+            "BSJ_peptide_coverage",
             "cORF_BSJ_position",
             "MS_count",
             "total_peptide_count",
@@ -461,9 +498,8 @@ def calculate_and_write_scores(
         ds_cross = get_detail_bucket(item, "cross")
         ds_non = get_detail_bucket(item, "non")
         score_ires = 0.15 * float(stats["IRES_SCORE"])
-        score_m6a = 0.15 * (1 - math.exp(-0.15 * stats["m"]))
-        len_adjustment = (stats["L"] / median_orf_len) ** 0.1 if median_orf_len > 0 else 1.0
-        score_cov = 0.10 * stats["cov"] * len_adjustment
+        score_m6a = 0.15 * (1 - math.exp(-0.5 * stats["m"]))
+        score_cov = 0.10 * stats["cov"]
         s_c_p = mixed_score(ds_cross["pep_count"], k_c_p, c_p_max)
         s_c_u = mixed_score(ds_cross["unique_pep"], k_c_u, c_u_max)
         s_c_m = mixed_score(ds_cross["ms_count"], k_c_m, c_m_max)
@@ -531,7 +567,7 @@ def process_orf(
             circ_orf_seq,
             str(orf_len),
             data["marge_peptide_bsj_multiple"],
-            f"{data['corf_peptide_ratio']:.4f}",
+            f"{data['bsj_peptide_coverage']:.4f}",
             data["bsj_location"],
             str(data["raw_sum"]),
             str(data["number_all"]),
@@ -549,7 +585,7 @@ def process_orf(
     stats = {
         "IRES_SCORE": weighted_ires_score,
         "m": m_val,
-        "cov": float(data["corf_peptide_ratio"]),
+        "cov": float(data["bsj_peptide_coverage"]),
         "L": len(circ_orf_seq.strip("*")),
         "MS": data["raw_sum"],
         "PEP": data["number_all"],
@@ -667,7 +703,7 @@ def draw_msgf_second(file_input: str, excellent_count: int, file_out: str, dic_i
     try:
         idx_corf_id = header_parts.index("circ_ORF_ID")
         idx_corf_seq = header_parts.index("cORF_seq")
-        idx_seq_cov = header_parts.index("peptide_coverage")
+        idx_seq_cov = header_parts.index("BSJ_peptide_coverage")
         idx_bsj_pos = header_parts.index("cORF_BSJ_position")
     except ValueError:
         return
@@ -1068,22 +1104,18 @@ def run_translation_validation(
     candidate_orfs: list[tuple[str, str]] = []
     all_peptide_rows: list[tuple[str, str, int, int, str, str]] = []
     for source_header in valid_source_ids:
-        source_seq = dic_source_aa.get(source_header, "")
-        if not source_seq:
-            source_base = source_header.split("(")[0]
-            source_seq = dic_orf_seqs_fallback.get(source_header, "") or dic_orf_seqs_fallback.get(source_base, "")
-        if not source_seq:
-            for out_id in dic_source_search_orfs.get(source_header, []):
-                source_seq = dic_orf_seqs_fallback.get(out_id, "") or dic_orf_seqs_fallback.get(out_id.split("(")[0], "")
-                if source_seq:
-                    break
-        if not source_seq:
+        full_seq = resolve_full_orf_sequence(source_header, dic_source_aa)
+        if not full_seq:
             continue
+        truncated_seq = resolve_bsj_truncated_orf_sequence(
+            source_header,
+            dic_orf_seqs_fallback,
+            dic_source_search_orfs,
+        )
 
         (
             pro_number_score,
             marge_peptide_bsj_multiple,
-            corf_peptide_ratio,
             _,
             raw_sum,
             number_all,
@@ -1092,9 +1124,15 @@ def run_translation_validation(
             unique_peptide_count,
             peptide_seq_str,
             peptide_rows,
-        ) = circ_orf_tsv_peptide_map(source_header, source_seq, dic_id_peptide, dic_circ_orf_bsj_location)
-        if marge_peptide_bsj_multiple == "none" and corf_peptide_ratio == "none":
+        ) = circ_orf_tsv_peptide_map(source_header, full_seq, dic_id_peptide, dic_circ_orf_bsj_location)
+        if marge_peptide_bsj_multiple == "none":
             continue
+        bsj_peptide_coverage = 0.0
+        if truncated_seq and source_header in dic_id_peptide:
+            bsj_peptide_coverage = compute_peptide_coverage_on_corf(
+                truncated_seq,
+                dic_id_peptide[source_header],
+            )
         all_peptide_rows.extend(peptide_rows)
 
         gene = extract_gene_from_orf_header(source_header)
@@ -1107,7 +1145,7 @@ def run_translation_validation(
         precomputed[source_header] = {
             "pro_number_score": pro_number_score,
             "marge_peptide_bsj_multiple": marge_peptide_bsj_multiple,
-            "corf_peptide_ratio": corf_peptide_ratio,
+            "bsj_peptide_coverage": bsj_peptide_coverage,
             "bsj_location": bsj_location,
             "raw_sum": raw_sum,
             "number_all": number_all,
@@ -1120,7 +1158,7 @@ def run_translation_validation(
             "gene": gene,
             "search_orf_ids": search_orf_str,
         }
-        candidate_orfs.append((source_header, source_seq))
+        candidate_orfs.append((source_header, full_seq))
 
     if not candidate_orfs:
         raise MStoCIRC2Error(
