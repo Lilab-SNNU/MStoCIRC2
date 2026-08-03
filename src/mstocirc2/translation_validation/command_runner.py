@@ -154,7 +154,10 @@ def add_eval_subparser(subparsers: argparse._SubParsersAction) -> argparse.Argum
         "--circ-mapping",
         dest="circ_mapping",
         metavar="<FILE>",
-        help="Path to the circRNA ORF mapping table.",
+        help=(
+            "Path to the circRNA ORF mapping table. Optional; if omitted together with "
+            "-fi/--circ-file-input, -co/--circ-orf is used as both the truncated and full-length ORF."
+        ),
     )
     opt.add_argument(
         "--deepcip-path",
@@ -196,6 +199,11 @@ def run_eval(args: argparse.Namespace) -> int:
 
     log.info("Evaluation stage started.")
     log.info("Output directory: %s", out_dir.resolve())
+    if not args.circ_file_input and not args.circ_mapping:
+        log.warning(
+            "Neither -fi/--circ-file-input nor -cm/--circ-mapping was provided; "
+            "using -co/--circ-orf as both the BSJ-truncated ORF and the full-length source ORF."
+        )
     if not deepcip_path:
         log.warning(
             "DeepCIP is unavailable. MS evidence evaluation will continue, but IRES-related "

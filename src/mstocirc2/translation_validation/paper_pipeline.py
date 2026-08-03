@@ -91,6 +91,40 @@ def load_mapping_context(circ_mapping: str | None) -> tuple[dict[str, str], dict
     return dic_output_to_source, dic_source_aa, dic_source_orf_coords
 
 
+def build_identity_mapping_from_orf(
+    circ_orf: str,
+) -> tuple[dict[str, str], dict[str, str], dict[str, tuple[int, int]]]:
+    dic_output_to_source: dict[str, str] = {}
+    dic_source_aa: dict[str, str] = {}
+    dic_source_orf_coords: dict[str, tuple[int, int]] = {}
+    if not Path(circ_orf).exists():
+        return dic_output_to_source, dic_source_aa, dic_source_orf_coords
+    cur_id = ""
+    cur_seq = ""
+
+    def _commit(header: str, seq: str) -> None:
+        if not header or not seq:
+            return
+        dic_output_to_source[header] = header
+        dic_source_aa[header] = seq
+        match = re.search(r"\((-?\d+),(-?\d+)\)", header)
+        if match:
+            coords = (int(match.group(1)), int(match.group(2)))
+            dic_source_orf_coords[header] = coords
+
+    with Path(circ_orf).open("r", encoding="utf-8", errors="ignore") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if line.startswith(">"):
+                _commit(cur_id, cur_seq)
+                cur_id = line[1:].strip()
+                cur_seq = ""
+            elif cur_id:
+                cur_seq += line
+        _commit(cur_id, cur_seq)
+    return dic_output_to_source, dic_source_aa, dic_source_orf_coords
+
+
 def read_circ_sequences(circ_seq: str) -> dict[str, str]:
     dic_circ_id_seq: dict[str, list[str]] = {}
     current_name: str | None = None
@@ -1059,7 +1093,10 @@ def run_translation_validation(
     output_dir = Path(file_out)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dic_output_to_source, dic_source_aa, dic_source_orf_coords = load_mapping_context(circ_mapping)
+    if circ_mapping and Path(circ_mapping).exists():
+        dic_output_to_source, dic_source_aa, dic_source_orf_coords = load_mapping_context(circ_mapping)
+    else:
+        dic_output_to_source, dic_source_aa, dic_source_orf_coords = build_identity_mapping_from_orf(circ_orf)
     dic_circ_id_seq = read_circ_sequences(circ_seq)
 
     dic_id_peptide = process_ms_directory(path_ms_input, str(output_dir), file_input_protein)
