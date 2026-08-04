@@ -6,19 +6,23 @@ import math
 import re
 import logging
 from pathlib import Path
+
+from ..orf_prediction.bsj_truncator import orf_coords_to_zero_based
+
 log = logging.getLogger(__name__)
 
 
 def build_ires_input_seq(circ_orf_id, dic_source_orf_coords, dic_circ_id_seq):
     coords = dic_source_orf_coords.get(circ_orf_id)
     if coords:
-        start_0based, end_0based = coords
+        start_1based, end_1based = coords
     else:
         m = re.search(r'\((-?\d+),(-?\d+)\)', circ_orf_id)
         if not m:
             return []
-        start_0based = int(m.group(1))
-        end_0based = int(m.group(2))
+        start_1based = int(m.group(1))
+        end_1based = int(m.group(2))
+    start_0based, orf_length = orf_coords_to_zero_based(start_1based, end_1based)
     circ_id = circ_orf_id.strip().split('-', 1)[0]
     full_seq = dic_circ_id_seq.get(circ_id, '')
     if not full_seq:
@@ -27,9 +31,6 @@ def build_ires_input_seq(circ_orf_id, dic_source_orf_coords, dic_circ_id_seq):
     circ_len = len(s)
     if circ_len < 10:
         return []
-    orf_length = end_0based - start_0based
-    if orf_length < 0:
-        orf_length = 0
     required_len = orf_length + 1000
     multiplier = max(10, int(math.ceil(required_len / circ_len)) + 4)
     s_multi = s * multiplier
@@ -166,12 +167,13 @@ def batch_m6a_predict(orf_entries, file_out, deepcircm6a_path, dic_source_orf_co
         for orf_id, orf_seq in orf_entries:
             coords = dic_source_orf_coords.get(orf_id)
             if coords:
-                start_0based = coords[0]
+                start_1based = coords[0]
             else:
                 m = re.search(r'\((-?\d+),-?\d+\)', orf_id)
                 if not m:
                     continue
-                start_0based = int(m.group(1))
+                start_1based = int(m.group(1))
+            start_0based = start_1based - 1
             circ_id = orf_id.strip().split('-')[0]
             seq = dic_circ_id_seq.get(circ_id, '')
             if not seq:

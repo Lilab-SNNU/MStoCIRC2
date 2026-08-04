@@ -65,9 +65,12 @@ def RNA_protein(
         name_suffix = "_" + sc_used
         if is_rct: name_suffix += "_RCT"
         candidates.append({
-            'start': start, 'end': start + current_nt_len, 
-            'aa_seq': "".join(aa_seq), 'nt_seq': RNA_string_extended[start:start+current_nt_len], 
-            'breakpoints': bp_string, 'suffix': name_suffix
+            'start': start + 1,
+            'end': start + current_nt_len,
+            'aa_seq': "".join(aa_seq),
+            'nt_seq': RNA_string_extended[start:start + current_nt_len],
+            'breakpoints': bp_string,
+            'suffix': name_suffix,
         })
     return candidates
 

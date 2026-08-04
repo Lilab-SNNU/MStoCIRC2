@@ -9,6 +9,27 @@ log = logging.getLogger(__name__)
 HEADER_RE = re.compile(r"^(?P<base>.+)-ORF(?P<orfnum>\d+)(?:_(?P<suffix>[A-Za-z0-9_]+))?\((?P<start>-?\d+),(?P<end>-?\d+)\)(?::(?P<gene>[^:]*))?(?::(?P<bps>.*))?$")
 
 _MEANINGLESS_GENE_VALUES = frozenset({"", "none", "unknown", "na", "nan", "null"})
+_START_CODONS = frozenset({"ATG", "TTG", "CTG", "GTG"})
+
+
+def orf_coords_to_zero_based(start_1based: int, end_1based: int) -> tuple[int, int]:
+    start_0 = int(start_1based) - 1
+    length = int(end_1based) - int(start_1based) + 1
+    if length < 0:
+        length = 0
+    return start_0, length
+
+
+def orf_effective_coding_nt_len(header: str, start_1based: int, end_1based: int) -> int:
+    _, length = orf_coords_to_zero_based(start_1based, end_1based)
+    match = HEADER_RE.match(header.split()[0])
+    suffix = (match.group("suffix") or "") if match else ""
+    if "RCT" in suffix:
+        return length
+    if any(part in _START_CODONS for part in suffix.split("_")):
+        if length >= 3:
+            return length - 3
+    return length
 
 
 def is_meaningful_gene(gene: str) -> bool:
@@ -99,8 +120,18 @@ def choose_best_event(
     return best
 
 def make_window(ev: Dict[str, Any], up_max: int, down_max: int) -> List[Any]:
-    e = ev['entry']; l = max(1, ev['aa_idx']-up_max); r = min(len(e['aa_no_stop']), ev['aa_idx']+down_max)
-    return [e['aa_no_stop'][l-1:r], e['nt_no_stop'][(l-1)*3:r*3], e['start']+(l-1)*3, e['start']+r*3, str(ev['aa_idx']-l+1)+'.'+str(ev['bp_type'])]
+    e = ev['entry']
+    l = max(1, ev['aa_idx'] - up_max)
+    r = min(len(e['aa_no_stop']), ev['aa_idx'] + down_max)
+    start_1based = e['start'] + (l - 1) * 3
+    end_1based = e['start'] + r * 3 - 1
+    return [
+        e['aa_no_stop'][l - 1:r],
+        e['nt_no_stop'][(l - 1) * 3:r * 3],
+        start_1based,
+        end_1based,
+        str(ev['aa_idx'] - l + 1) + '.' + str(ev['bp_type']),
+    ]
 
 def build_header(base: str, tag: str, s: int, e: int, gene: str, bp: str) -> str:
     h = base + '-' + tag + '(' + str(s) + ',' + str(e) + ')'

@@ -1007,7 +1007,7 @@ def draw_circ_corf(
             match = re.search(r"\((-?\d+),(-?\d+)\)", source_orf_id)
             if not match or circ_seq_len == 0:
                 continue
-            start_pos = int(match.group(1))
+            start_pos = int(match.group(1)) - 1
             orf_start_abs = start_pos % circ_seq_len
             base_r_orf = 4.2
             r_drop_per_turn = 0.36
