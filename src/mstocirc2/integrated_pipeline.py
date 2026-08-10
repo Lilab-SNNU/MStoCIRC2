@@ -106,14 +106,17 @@ def build_design_from_manifest(manifest_path: str | Path, output_path: str | Pat
         writer = csv.writer(handle, delimiter="\t")
         writer.writerow(["sample", "condition"])
         for row in rows:
-            if len(row) < 2 or not row[1]:
+            if len(row) < 2 or not row[0] or not row[1]:
                 raise CLIUsageError(
-                    f"Manifest row is missing the sample/group column required for DEA: {row!r}"
+                    "Each manifest row must contain the LC-MS path and experiment/group label "
+                    f"(FragPipe columns 1-2). Offending row: {row!r}"
                 )
-            ms_path = Path(row[0])
-            sample_name = row[1] or ms_path.stem
-            condition = row[2] if len(row) >= 3 and row[2] else row[1]
-            writer.writerow([sample_name, condition])
+            sample_name = Path(row[0]).stem
+            if not sample_name:
+                raise CLIUsageError(
+                    f"Unable to derive a sample name from LC-MS path in manifest row: {row!r}"
+                )
+            writer.writerow([sample_name, row[1]])
     return out_path
 
 
@@ -164,9 +167,9 @@ def build_design_from_experiment_annotation(
 def _manifest_conditions(manifest_path: str | Path) -> list[str]:
     conditions: list[str] = []
     for row in _manifest_rows(manifest_path):
-        condition = row[2] if len(row) >= 3 and row[2] else (row[1] if len(row) >= 2 else "")
-        if condition:
-            conditions.append(condition)
+        if len(row) < 2 or not row[1]:
+            continue
+        conditions.append(row[1])
     return sorted(set(conditions))
 
 
@@ -657,7 +660,7 @@ def _add_orf_inputs(parser: argparse.ArgumentParser) -> None:
 def _add_fragpipe_inputs(parser: argparse.ArgumentParser) -> None:
     grp = parser.add_argument_group("FragPipe inputs")
     grp.add_argument("-wf", "--workflow", metavar="<FILE>", default=None, help="Path to a custom FragPipe workflow template. If omitted, MStoCIRC2 selects a built-in workflow template from the manifest data type and pipeline mode.")
-    grp.add_argument("-mf", "--manifest", metavar="<FILE>", required=True, help="Path to the FragPipe manifest file.")
+    grp.add_argument("-mf", "--manifest", metavar="<FILE>", required=True, help="Path to the FragPipe manifest (columns: LC-MS path, experiment/group, bioreplicate, data type).")
     grp.add_argument(
         "-fb",
         "--fragpipe-bin",

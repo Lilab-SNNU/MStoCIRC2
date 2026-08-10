@@ -70,19 +70,6 @@ def _detect_manifest_data_type(manifest_path: str) -> str:
 
 
 def _normalize_manifest_for_fragpipe(manifest_path: str, output_dir: str | Path) -> Path:
-    """Write a FragPipe-friendly manifest without altering the user-provided file.
-
-    FragPipe headless mode expects four tab-separated columns:
-    LC-MS file, experiment, bioreplicate, and data type.
-
-    The integrated pipeline uses column 3 as a user-facing grouping/condition field.
-    For DDA runs this is often blank, but for DIA runs users may provide labels such as
-    ``P2``/``P21`` instead of numeric bioreplicates. FragPipe can silently skip all
-    inputs in that case. To keep the original manifest semantics for downstream DEA
-    while still feeding FragPipe a valid file, normalize the manifest into the current
-    search output directory.
-    """
-
     source = Path(manifest_path)
     normalized_path = Path(output_dir) / "fragpipe_input.fp-manifest"
 
@@ -103,34 +90,36 @@ def _normalize_manifest_for_fragpipe(manifest_path: str, output_dir: str | Path)
     for row in rows:
         if len(row) < 2 or not row[0] or not row[1]:
             raise CLIUsageError(
-                "Each manifest row must contain at least the LC-MS path and experiment/sample label. "
+                "Each manifest row must contain at least the LC-MS path and experiment/group label. "
                 f"Offending row: {row!r}"
             )
 
         if len(row) >= 4 and row[3]:
             data_type = row[3].upper()
+            experiment = row[1]
             third_col = row[2] if len(row) >= 3 else ""
-
             if not third_col:
-                experiment = row[1]
                 bioreplicate = ""
             elif third_col.isdigit():
-                experiment = row[1]
                 bioreplicate = third_col
             else:
-                experiment = third_col
                 replicate_counters[experiment] += 1
                 bioreplicate = str(replicate_counters[experiment])
         elif len(row) >= 3 and row[2].upper() in {"DDA", "DIA"}:
-            # Legacy three-column layout: file, experiment, data_type.
             experiment = row[1]
             bioreplicate = ""
             data_type = row[2].upper()
         else:
             raise CLIUsageError(
                 "Unable to normalize manifest row for FragPipe. Expected either "
-                "`file<TAB>experiment<TAB>bioreplicate<TAB>data_type` or the "
-                "`file<TAB>experiment<TAB>data_type` compatibility layout. "
+                "`file<TAB>experiment/group<TAB>bioreplicate<TAB>data_type` or the "
+                "`file<TAB>experiment/group<TAB>data_type` compatibility layout. "
+                f"Offending row: {row!r}"
+            )
+
+        if data_type not in {"DDA", "DIA"}:
+            raise CLIUsageError(
+                f"Unsupported manifest data type '{data_type}'. Expected 'DDA' or 'DIA'. "
                 f"Offending row: {row!r}"
             )
 
@@ -319,7 +308,7 @@ def add_search_subparser(subparsers: argparse._SubParsersAction) -> argparse.Arg
         default=None,
         help="Path to a custom FragPipe workflow template. If omitted, MStoCIRC2 selects a built-in workflow template from the manifest data type and pipeline mode.",
     )
-    p.add_argument("-mf", "--manifest", dest="manifest", metavar="<FILE>", required=True, help="Path to the FragPipe manifest file.")
+    p.add_argument("-mf", "--manifest", dest="manifest", metavar="<FILE>", required=True, help="Path to the FragPipe manifest (columns: LC-MS path, experiment/group, bioreplicate, data type).")
     p.add_argument(
         "-fb",
         "--fragpipe-bin",

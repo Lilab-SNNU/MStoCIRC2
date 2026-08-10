@@ -353,5 +353,5 @@ Default location:
 | --- | --- |
 | `run_metadata.json` | Compact run summary recording strategy, organism, contrast, filtering summary, volcano summary, enrichment summary, and total runtime. |
 | `dea_skipped.txt` | Integrated `quant` writes this file instead of running DEA when fewer than two groups can be reconstructed from the manifest. |
-| `.mstocirc2_runtime/dea/design.from_manifest.tsv` | Hidden integrated-workflow helper file containing the DEA design table rebuilt from the manifest when no DIA experiment annotation is available. |
+| `.mstocirc2_runtime/dea/design.from_manifest.tsv` | Hidden integrated-workflow helper file containing the DEA design table rebuilt from the FragPipe manifest. Column 2 of the manifest is used as `condition` (experiment/group); each sample name is taken from the LC-MS file stem in column 1. Column 3 (bioreplicate) is not treated as a group label. |
 | `.mstocirc2_runtime/dea/design.from_annotation.tsv` | Hidden integrated-workflow helper file containing the DEA design table rebuilt from `experiment_annotation.tsv` for DIA quant runs. |
