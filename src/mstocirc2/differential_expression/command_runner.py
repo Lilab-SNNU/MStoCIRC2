@@ -18,7 +18,7 @@ from .expression_io import (
     load_peptide_matrix,
 )
 from .homology_refining import filter_peptides, STRIPPED_SEQ_CANDIDATES, PROTEIN_ASSIGN_CANDIDATES, _first_present
-from .intensity_aggregator import rollup_peptides_to_proteins
+from .intensity_aggregator import rollup_peptides_to_proteins, filter_proteins_by_group_detection
 from .missing_value_imputer import impute
 from .statistical_dea import run_dea
 from .mrna_coexpression import correlate_circrna_vs_mrna
@@ -224,17 +224,6 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
         len(protein_matrix),
         len(rollup_summary),
     )
-    protein_matrix.to_csv(out / "protein_quant.tsv", sep="\t")
-    rollup_summary.to_csv(out / "rollup_summary.tsv", sep="\t", index=False)
-    log.info("Protein matrix: %s", protein_matrix.shape)
-
-    # Imputation
-    if protein_matrix.empty:
-        raise DifferentialExpressionError("Protein matrix is empty – cannot proceed.")
-    protein_imputed = impute(protein_matrix, strategy.imputation)
-    protein_imputed.to_csv(out / "protein_quant_imputed.tsv", sep="\t")
-
-    # DEA
     groups_sorted = sorted(conds)
     if len(groups_sorted) != 2:
         raise DifferentialExpressionError("DEA currently requires exactly two conditions.")
@@ -243,6 +232,23 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
     log.info("Contrast: %s", contrast)
     if design["condition"].value_counts().min() < 2:
         raise DifferentialExpressionError("Each group needs at least 2 samples.")
+
+    protein_matrix, detection_summary = filter_proteins_by_group_detection(
+        protein_matrix, design
+    )
+    rollup_summary = rollup_summary[
+        rollup_summary["protein_id"].isin(protein_matrix.index)
+    ].reset_index(drop=True)
+    filter_summary = {**filter_summary, **detection_summary}
+    log.info("Detection filter: %s", detection_summary)
+    protein_matrix.to_csv(out / "protein_quant.tsv", sep="\t")
+    rollup_summary.to_csv(out / "rollup_summary.tsv", sep="\t", index=False)
+    log.info("Protein matrix: %s", protein_matrix.shape)
+
+    if protein_matrix.empty:
+        raise DifferentialExpressionError("Protein matrix is empty – cannot proceed.")
+    protein_imputed = impute(protein_matrix, strategy.imputation)
+    protein_imputed.to_csv(out / "protein_quant_imputed.tsv", sep="\t")
 
     peptide_counts = rollup_summary.set_index("protein_id")["retained_peptide_count"]
     is_circrna = rollup_summary.set_index("protein_id")["is_circrna"]
@@ -264,7 +270,6 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
     sig_count = (dea_df[p_col] < args.fdr_threshold).sum()
     log.info("DEA: %d rows, %d below %s threshold", len(dea_df), sig_count, p_col)
 
-    # Volcano
     vstats = volcano_plot(
         dea_df,
         str(out / "volcano_plot.pdf"),
@@ -296,31 +301,41 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
     }
 
     enrichment_summary = {}
-    for grp_name, sign_fn in ((group_a, lambda v: v > 0), (group_b, lambda v: v < 0)):
-        subset = sig[sig["log2FC"].apply(sign_fn)]
-        if subset.empty:
-            log.info("[%s] no upreg circRNA; skip", grp_name)
-            continue
-        grp_samples = per_group_samples[grp_name]
-        n_grp = len(grp_samples)
-        log.info("[%s] upreg circRNA: %d, samples: %d", grp_name, len(subset), n_grp)
-
-        grp_corr = correlate_circrna_vs_mrna(
-            protein_imputed,
-            list(subset["protein_id"]),
-            mrna_ids_in_matrix,
-            method=_CORRELATION_METHOD,
-            sample_subset=grp_samples,
-            top_k_per_circrna=_TOP_PROXY_MRNA if n_grp < 3 else None,
-            p_threshold=args.fdr_threshold,
-            use_adj_p=args.use_adj_pvalue,
+    n_a = len(per_group_samples[group_a])
+    n_b = len(per_group_samples[group_b])
+    if n_a < 3 or n_b < 3:
+        log.info(
+            "Skip correlation and enrichment: need >=3 samples per group (got %s=%d, %s=%d)",
+            group_a,
+            n_a,
+            group_b,
+            n_b,
         )
-        grp_corr.to_csv(out / f"correlation_{grp_name}.tsv", sep="\t", index=False)
-        if grp_corr.empty:
-            log.warning("[%s] no correlated mRNAs", grp_name)
-            continue
+    else:
+        for grp_name, sign_fn in ((group_a, lambda v: v > 0), (group_b, lambda v: v < 0)):
+            subset = sig[sig["log2FC"].apply(sign_fn)]
+            if subset.empty:
+                log.info("[%s] no upreg circRNA; skip", grp_name)
+                continue
+            grp_samples = per_group_samples[grp_name]
+            n_grp = len(grp_samples)
+            log.info("[%s] upreg circRNA: %d, samples: %d", grp_name, len(subset), n_grp)
 
-        if n_grp >= 3:
+            grp_corr = correlate_circrna_vs_mrna(
+                protein_imputed,
+                list(subset["protein_id"]),
+                mrna_ids_in_matrix,
+                method=_CORRELATION_METHOD,
+                sample_subset=grp_samples,
+                top_k_per_circrna=None,
+                p_threshold=args.fdr_threshold,
+                use_adj_p=args.use_adj_pvalue,
+            )
+            grp_corr.to_csv(out / f"correlation_{grp_name}.tsv", sep="\t", index=False)
+            if grp_corr.empty:
+                log.warning("[%s] no correlated mRNAs", grp_name)
+                continue
+
             per_circ_top = (
                 grp_corr
                 .assign(abs_corr=grp_corr["correlation"].abs())
@@ -328,41 +343,33 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
                 .groupby("circrna_id").head(_TOP_PROXY_MRNA)
             )
             proxy_mrnas = per_circ_top["mrna_id"].drop_duplicates().tolist()
-        else:
-            per_circ_top = (
-                grp_corr
-                .assign(abs_score=grp_corr["rank_score"].abs())
-                .sort_values(["circrna_id", "abs_score"], ascending=[True, False])
-                .groupby("circrna_id").head(_TOP_PROXY_MRNA)
-            )
-            proxy_mrnas = per_circ_top["mrna_id"].drop_duplicates().tolist()
 
-        enrichment_summary[grp_name] = {"upreg_circ": len(subset), "proxy_count": len(proxy_mrnas)}
-        gene_list = list(
-            dict.fromkeys(
-                prot2gene.get(m.strip(), m)
-                for m in proxy_mrnas
-                if prot2gene.get(m.strip(), m).lower() not in ("", "nan")
-            )
-        )
-        pd.DataFrame(
-            {
-                "mrna_id": proxy_mrnas[: len(gene_list)],
-                "gene_symbol": gene_list[: len(proxy_mrnas)],
-            }
-        ).to_csv(out / f"proxy_genes_{grp_name}.tsv", sep="\t", index=False)
-
-        if len(gene_list) >= 5:
-            log.info("[%s] enrichment on %d genes", grp_name, len(gene_list))
-            try:
-                run_enrichment(
-                    gene_list,
-                    args.organism,
-                    str(out / f"enrichment_{grp_name}"),
-                    use_adj_p=args.use_adj_pvalue,
+            enrichment_summary[grp_name] = {"upreg_circ": len(subset), "proxy_count": len(proxy_mrnas)}
+            gene_list = list(
+                dict.fromkeys(
+                    prot2gene.get(m.strip(), m)
+                    for m in proxy_mrnas
+                    if prot2gene.get(m.strip(), m).lower() not in ("", "nan")
                 )
-            except Exception as e:
-                log.warning("[%s] enrichment failed: %s", grp_name, e)
+            )
+            pd.DataFrame(
+                {
+                    "mrna_id": proxy_mrnas[: len(gene_list)],
+                    "gene_symbol": gene_list[: len(proxy_mrnas)],
+                }
+            ).to_csv(out / f"proxy_genes_{grp_name}.tsv", sep="\t", index=False)
+
+            if len(gene_list) >= 5:
+                log.info("[%s] enrichment on %d genes", grp_name, len(gene_list))
+                try:
+                    run_enrichment(
+                        gene_list,
+                        args.organism,
+                        str(out / f"enrichment_{grp_name}"),
+                        use_adj_p=args.use_adj_pvalue,
+                    )
+                except Exception as e:
+                    log.warning("[%s] enrichment failed: %s", grp_name, e)
 
     metadata = {
         "tool": "MStoCIRC2",
@@ -373,6 +380,7 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
         "strategy_detail": strategy.as_dict(),
         "contrast": contrast,
         "filter_summary": filter_summary,
+        "detection_summary": detection_summary,
         "volcano_stats": vstats,
         "enrichment_summary": enrichment_summary,
         "elapsed_sec": round(time.time() - start_ts, 2),

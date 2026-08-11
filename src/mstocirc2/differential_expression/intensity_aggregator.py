@@ -97,6 +97,33 @@ def _run_directlfq(long_df: pd.DataFrame, design_samples: List[str]) -> pd.DataF
     return protein_df[design_samples]
 
 
+def filter_proteins_by_group_detection(
+    protein_matrix: pd.DataFrame,
+    design: pd.DataFrame,
+) -> Tuple[pd.DataFrame, Dict[str, int]]:
+    matched = [
+        s for s in design["sample"].astype(str) if s in protein_matrix.columns
+    ]
+    if not matched:
+        raise ValueError("No design samples match protein matrix columns for detection filtering.")
+    keep_mask = pd.Series(False, index=protein_matrix.index)
+    for _, grp in design.groupby("condition", sort=False):
+        samples = [s for s in grp["sample"].astype(str) if s in protein_matrix.columns]
+        if not samples:
+            continue
+        n = len(samples)
+        vals = protein_matrix[samples].apply(pd.to_numeric, errors="coerce")
+        detected = vals.notna() & (vals > 0)
+        keep_mask = keep_mask | (detected.sum(axis=1) > (n / 2.0))
+    filtered = protein_matrix.loc[keep_mask].copy()
+    summary = {
+        "input_protein_count": int(len(protein_matrix)),
+        "proteins_retained": int(len(filtered)),
+        "proteins_removed_low_detection": int(len(protein_matrix) - len(filtered)),
+    }
+    return filtered, summary
+
+
 def rollup_peptides_to_proteins(
     peptide_df: pd.DataFrame,
     sample_columns: Dict[str, str],
