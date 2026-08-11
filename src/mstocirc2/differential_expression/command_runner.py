@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from ..cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
-from ..core import CLIUsageError, DependencyError, ensure_directory, make_default_module_output_dir
+from ..core import CLIUsageError, DependencyError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir
 from .r_runtime_bridge import RSCRIPT
 from .workflow_strategy import resolve_strategy, STRATEGY_REGISTRY
 from .expression_io import (
@@ -28,9 +28,6 @@ from .kegg_registry import describe_kegg_organism, normalize_kegg_organism
 
 log = logging.getLogger("circrna_dea")
 
-# ---------------------------------------------------------------------------
-# Internal defaults kept stable across DEA strategy presets
-# ---------------------------------------------------------------------------
 _CORRELATION_METHOD = "pearson"
 _TOP_PROXY_MRNA = 100
 _TOP_LABEL = 10
@@ -43,7 +40,7 @@ _DEFAULT_ORGANISM = "hsa"
 _KEGG_REFERENCE_URL = "https://www.kegg.jp/kegg/tables/br08606.html"
 
 
-class DifferentialExpressionError(Exception):
+class DifferentialExpressionError(MStoCIRC2Error):
     """Raised when the DEA pipeline cannot proceed."""
 
 
@@ -54,7 +51,9 @@ def add_dea_subparser(subparsers: argparse._SubParsersAction) -> argparse.Argume
             "Input Rules",
             [
                 "  - '--peptide-matrix' must contain quantification columns matching the design sample names.",
-                "  - '--circrna-reference' must come from the same ORF/search universe as the peptide matrix.",
+                "  - '--circrna-reference' is optional; when provided it should come from the same ORF/search universe as the peptide matrix.",
+                "  - When '--circrna-reference' is omitted, circRNA–linear homology peptide filtering is skipped.",
+                "  - Low-detection protein filtering before imputation always runs, with or without '--circrna-reference'.",
                 "  - Current DEA implementation requires exactly two experimental conditions.",
             ],
         ),
@@ -62,6 +61,7 @@ def add_dea_subparser(subparsers: argparse._SubParsersAction) -> argparse.Argume
             "Examples",
             [
                 "  mstocirc2 dea -pm peptide_matrix.tsv -cr circ_translation_evidence.tsv -de design.txt -st generic -o out_dea",
+                "  mstocirc2 dea -pm peptide_matrix.tsv -de design.txt -st generic -o out_dea",
             ],
         ),
     )
@@ -72,13 +72,24 @@ def add_dea_subparser(subparsers: argparse._SubParsersAction) -> argparse.Argume
         description=branded_description(
             "Run circRNA-aware quantitative roll-up, imputation, differential expression analysis, volcano plotting, "
             "optional circRNA-mRNA correlation, and enrichment analysis.",
-            "mstocirc2 dea -pm <FILE> -cr <FILE> -de <FILE> [options]",
+            "mstocirc2 dea -pm <FILE> -de <FILE> [-cr <FILE>] [options]",
         ),
         epilog=epilog,
     )
     p.set_defaults(runner=run_differential_analysis)
     p.add_argument("-pm", "--peptide-matrix", metavar="<FILE>", required=True, help="Path to the peptide quantification matrix.")
-    p.add_argument("-cr", "--circrna-reference", metavar="<FILE>", required=True, help="Path to the circRNA reference table, for example 'circ_translation_evidence.tsv'.")
+    p.add_argument(
+        "-cr",
+        "--circrna-reference",
+        metavar="<FILE>",
+        default=None,
+        help=(
+            "Optional path to the circRNA reference table (for example 'circ_translation_evidence.tsv'). "
+            "When provided, circRNA entries are filtered to peptides present in this reference "
+            "(linear-homology peptide removal). When omitted, that filter is skipped and all peptide "
+            "rows proceed to roll-up. Low-detection protein filtering before imputation still applies."
+        ),
+    )
     p.add_argument("-de", "--design", metavar="<FILE>", required=True, help="Path to the sample design or metadata table (.txt or .tsv).")
     p.add_argument(
         "-o",
@@ -147,32 +158,92 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
     args.output_dir = str(out)
     start_ts = time.time()
 
-    strategy = resolve_strategy(args.strategy)
+    try:
+        strategy = resolve_strategy(args.strategy)
+    except ValueError as exc:
+        raise CLIUsageError(str(exc)) from exc
     log.info("Strategy '%s' -> %s", args.strategy, strategy.as_dict())
     log.info("Enrichment organism: %s", describe_kegg_organism(args.organism))
 
-    design = parse_design(args.design)
+    try:
+        design = parse_design(args.design)
+    except FileNotFoundError as exc:
+        raise CLIUsageError(
+            f"-de design file not found: '{args.design}'. "
+            "Provide an existing TSV with columns 'sample' and 'condition'."
+        ) from exc
+    except ValueError as exc:
+        raise CLIUsageError(f"-de design file is invalid: {exc}") from exc
+
     conds = design["condition"].unique().tolist()
     log.info("  design: %d samples, conditions: %s", len(design), conds)
 
-    peptide_df, matrix_fmt = load_peptide_matrix(args.peptide_matrix, design["sample"].tolist())
+    try:
+        peptide_df, matrix_fmt = load_peptide_matrix(
+            args.peptide_matrix, design["sample"].tolist()
+        )
+    except FileNotFoundError as exc:
+        raise CLIUsageError(
+            f"-pm peptide matrix not found: '{args.peptide_matrix}'."
+        ) from exc
+    except ValueError as exc:
+        raise CLIUsageError(f"-pm peptide matrix is invalid: {exc}") from exc
     log.info("  peptide matrix: %s (format: %s)", peptide_df.shape, matrix_fmt)
 
-    _, circ_ref_peptides, circ_orf_ids = parse_circrna_reference(args.circrna_reference)
-    log.info("  circRef_Set: %d peptides, %d ORF IDs", len(circ_ref_peptides), len(circ_orf_ids))
+    circ_ref_peptides: set[str] = set()
+    circ_orf_ids: set[str] = set()
+    circ_reference_provided = bool(args.circrna_reference and str(args.circrna_reference).strip())
+    if circ_reference_provided:
+        try:
+            _, circ_ref_peptides, circ_orf_ids = parse_circrna_reference(args.circrna_reference)
+        except FileNotFoundError as exc:
+            raise CLIUsageError(
+                f"-cr circRNA reference not found: '{args.circrna_reference}'."
+            ) from exc
+        except ValueError as exc:
+            raise CLIUsageError(f"-cr circRNA reference is invalid: {exc}") from exc
+        log.info("  circRef_Set: %d peptides, %d ORF IDs", len(circ_ref_peptides), len(circ_orf_ids))
+    else:
+        log.info(
+            "-cr not provided: skipping circRNA–linear homology peptide filtering; "
+            "all peptide rows will proceed to roll-up. "
+            "Low-detection protein filtering before imputation will still be applied."
+        )
 
-    sample_cols = match_samples_to_columns(design["sample"].tolist(), list(peptide_df.columns))
+    try:
+        sample_cols = match_samples_to_columns(
+            design["sample"].tolist(), list(peptide_df.columns)
+        )
+    except ValueError as exc:
+        raise CLIUsageError(str(exc)) from exc
     log.info("  %d samples matched", len(sample_cols))
 
-    filtered, filter_report, filter_summary = filter_peptides(
-        peptide_df, circ_ref_peptides, circ_orf_ids
-    )
-    filter_report.to_csv(out / "peptide_filter_report.tsv", sep="\t", index=False)
-    log.info("Filter: %s", filter_summary)
-    if filter_summary.get("circrna_peptides_retained", 0) <= 0:
-        raise DifferentialExpressionError(
-            "No circRNA peptides remained after circRNA reference matching and homology filtering. "
-            "Check that the peptide matrix and circRNA reference come from the same search/ORF universe."
+    if circ_reference_provided:
+        filtered, filter_report, filter_summary = filter_peptides(
+            peptide_df, circ_ref_peptides, circ_orf_ids
+        )
+        filter_report.to_csv(out / "peptide_filter_report.tsv", sep="\t", index=False)
+        log.info("Filter: %s", filter_summary)
+        if filter_summary.get("circrna_peptides_retained", 0) <= 0:
+            raise DifferentialExpressionError(
+                "No circRNA peptides remained after circRNA reference matching and homology filtering. "
+                "Check that the peptide matrix and circRNA reference come from the same search/ORF universe."
+            )
+    else:
+        filtered = peptide_df.copy().reset_index(drop=True)
+        filter_report = pd.DataFrame(columns=["peptide_seq", "protein_group", "removed_reason"])
+        filter_report.to_csv(out / "peptide_filter_report.tsv", sep="\t", index=False)
+        filter_summary = {
+            "input_peptide_count": int(len(peptide_df)),
+            "peptides_removed_mrna_homology": 0,
+            "peptides_retained": int(len(filtered)),
+            "circrna_peptides_retained": None,
+            "homology_filter": "skipped_no_circrna_reference",
+        }
+        log.info(
+            "Homology filter skipped (-cr omitted): retained %d / %d peptide rows",
+            filter_summary["peptides_retained"],
+            filter_summary["input_peptide_count"],
         )
 
     # Pre-filter counts
@@ -378,6 +449,8 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
         "organism": args.organism,
         "organism_label": describe_kegg_organism(args.organism),
         "strategy_detail": strategy.as_dict(),
+        "circrna_reference": args.circrna_reference if circ_reference_provided else None,
+        "homology_filter_applied": circ_reference_provided,
         "contrast": contrast,
         "filter_summary": filter_summary,
         "detection_summary": detection_summary,

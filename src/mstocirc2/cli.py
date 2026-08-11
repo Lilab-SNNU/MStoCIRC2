@@ -114,8 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         log.error("Execution interrupted by user.")
         return 130
-    except Exception:
-        log.exception("Unhandled pipeline error.")
+    except Exception as exc:
+        log.error("%s", exc, exc_info=True)
         return 1
 
 
