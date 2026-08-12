@@ -5,6 +5,10 @@ from __future__ import annotations
 import logging
 import shutil
 import sys
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Iterator
 
 
 class TerminalProgressBar:
@@ -65,3 +69,20 @@ def configure_logging(verbose: int = 0, quiet: bool = False) -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(CompactCliFormatter())
     logging.basicConfig(level=level, handlers=[handler], force=True)
+
+
+@contextmanager
+def module_file_log(output_dir: str | Path) -> Iterator[Path]:
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    log_path = out / f"log_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler.setFormatter(CompactCliFormatter())
+    handler.setLevel(logging.NOTSET)
+    root = logging.getLogger()
+    root.addHandler(handler)
+    try:
+        yield log_path
+    finally:
+        root.removeHandler(handler)
+        handler.close()

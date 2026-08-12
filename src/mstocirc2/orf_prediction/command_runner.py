@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from ..cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
-from ..core import CLIUsageError, make_default_module_output_dir, require_command
+from ..core import CLIUsageError, make_default_module_output_dir, module_file_log, require_command
 from .bsj_truncator import filter_within_circ, postprocess_orf_records
 from .circular_translator import translate_circ_orfs
 from .genome_extractor import extract_sequences
@@ -231,44 +231,45 @@ def run_orf_prediction(args: Any) -> int:
         else [args.canonical_protein]
     )
 
-    mode_label = "sequence-input mode" if use_sequence_mode else "genome-based mode"
-    log.info("ORF stage started in %s", mode_label)
-    log.info("Output directory: %s", output_dir.resolve())
-    log.info("Start codons: %s", ",".join(start_codon_list))
+    with module_file_log(output_dir):
+        mode_label = "sequence-input mode" if use_sequence_mode else "genome-based mode"
+        log.info("ORF stage started in %s", mode_label)
+        log.info("Output directory: %s", output_dir.resolve())
+        log.info("Start codons: %s", ",".join(start_codon_list))
 
-    extract_sequences(args, output_prefix)
+        extract_sequences(args, output_prefix)
 
-    raw_records = translate_circ_orfs(
-        fasta_path=f"{output_prefix}circRNA_full_length.fasta",
-        min_orf_len=args.min_orf_len,
-        flank_aa_len=args.flank_aa_len,
-        start_codons=start_codon_list,
-    )
-    raw_orf_path = output_dir / "circRNA_all_ORF.fasta"
-    with raw_orf_path.open("w", encoding="utf-8") as handle:
-        for record in raw_records:
-            handle.write(f">{record['header']}\n{record['sequence']}\n")
-    log.info("Raw ORFs exported: %d", len(raw_records))
+        raw_records = translate_circ_orfs(
+            fasta_path=f"{output_prefix}circRNA_full_length.fasta",
+            min_orf_len=args.min_orf_len,
+            flank_aa_len=args.flank_aa_len,
+            start_codons=start_codon_list,
+        )
+        raw_orf_path = output_dir / "circRNA_all_ORF.fasta"
+        with raw_orf_path.open("w", encoding="utf-8") as handle:
+            for record in raw_records:
+                handle.write(f">{record['header']}\n{record['sequence']}\n")
+        log.info("Raw ORFs exported: %d", len(raw_records))
 
-    log.info("Applying BSJ-aware truncation.")
-    stage1 = postprocess_orf_records(
-        raw_records,
-        args.flank_aa_len,
-        start_codon_list=start_codon_list,
-    )
-    log.info("BSJ-filtered ORFs: %d", len(stage1))
+        log.info("Applying BSJ-aware truncation.")
+        stage1 = postprocess_orf_records(
+            raw_records,
+            args.flank_aa_len,
+            start_codon_list=start_codon_list,
+        )
+        log.info("BSJ-filtered ORFs: %d", len(stage1))
 
-    log.info("Removing intra-circRNA duplicate ORFs.")
-    stage2 = filter_within_circ(stage1)
-    log.info("Deduplicated ORFs: %d", len(stage2))
+        log.info("Removing intra-circRNA duplicate ORFs.")
+        stage2 = filter_within_circ(stage1)
+        log.info("Deduplicated ORFs: %d", len(stage2))
 
-    log.info("Filtering ORFs against linear reference proteomes.")
-    stage3 = filter_by_references(stage2, protein_ref_list)
-    log.info("Homology-filtered ORFs: %d", len(stage3))
+        log.info("Filtering ORFs against linear reference proteomes.")
+        stage3 = filter_by_references(stage2, protein_ref_list)
+        log.info("Homology-filtered ORFs: %d", len(stage3))
 
-    final_records = restore_duplicate_orfs(stage3)
-    write_final_outputs(output_prefix, final_records)
-    cleanup_intermediate_files(output_prefix, use_sequence_mode)
+        final_records = restore_duplicate_orfs(stage3)
+        write_final_outputs(output_prefix, final_records)
+        cleanup_intermediate_files(output_prefix, use_sequence_mode)
 
-    log.info("ORF stage completed: %s", output_dir.resolve())
-    return 0
+        log.info("ORF stage completed: %s", output_dir.resolve())
+        return 0

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from ..cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
-from ..core import CLIUsageError, DependencyError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir
+from ..core import CLIUsageError, DependencyError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir, module_file_log
 from .r_runtime_bridge import RSCRIPT
 from .workflow_strategy import resolve_strategy, STRATEGY_REGISTRY
 from .expression_io import (
@@ -157,7 +157,13 @@ def run_differential_analysis(args: argparse.Namespace) -> int:
         out = make_default_module_output_dir("dea")
     args.output_dir = str(out)
     start_ts = time.time()
+    with module_file_log(out):
+        return _run_differential_analysis_impl(args, out, start_ts)
 
+
+def _run_differential_analysis_impl(
+    args: argparse.Namespace, out: Path, start_ts: float
+) -> int:
     try:
         strategy = resolve_strategy(args.strategy)
     except ValueError as exc:

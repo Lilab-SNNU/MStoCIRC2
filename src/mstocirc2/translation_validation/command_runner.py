@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 from ..cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
-from ..core import CLIUsageError, DependencyError, make_default_module_output_dir, require_command
+from ..core import CLIUsageError, DependencyError, make_default_module_output_dir, module_file_log, require_command
 from .paper_pipeline import resolve_predictor_path, run_translation_validation
 
 log = logging.getLogger("translation_validation")
@@ -197,34 +197,35 @@ def run_eval(args: argparse.Namespace) -> int:
     )
     deepcip_python = _configured_python_bin(args.deepcip_python, _DEEPCIP_PYTHON_ENV)
 
-    log.info("Evaluation stage started.")
-    log.info("Output directory: %s", out_dir.resolve())
-    if not args.circ_file_input and not args.circ_mapping:
-        log.warning(
-            "Neither -fi/--circ-file-input nor -cm/--circ-mapping was provided; "
-            "using -co/--circ-orf as both the BSJ-truncated ORF and the full-length source ORF."
-        )
-    if not deepcip_path:
-        log.warning(
-            "DeepCIP is unavailable. MS evidence evaluation will continue, but IRES-related "
-            "translation-potential scoring will be incomplete."
-        )
-    if not deepcircm6a_path:
-        log.warning(
-            "DeepCircM6A is unavailable. MS evidence evaluation will continue, but m6A-related "
-            "translation-potential scoring will be incomplete."
-        )
-    _ensure_executable_on_path("diamond")
+    with module_file_log(out_dir):
+        log.info("Evaluation stage started.")
+        log.info("Output directory: %s", out_dir.resolve())
+        if not args.circ_file_input and not args.circ_mapping:
+            log.warning(
+                "Neither -fi/--circ-file-input nor -cm/--circ-mapping was provided; "
+                "using -co/--circ-orf as both the BSJ-truncated ORF and the full-length source ORF."
+            )
+        if not deepcip_path:
+            log.warning(
+                "DeepCIP is unavailable. MS evidence evaluation will continue, but IRES-related "
+                "translation-potential scoring will be incomplete."
+            )
+        if not deepcircm6a_path:
+            log.warning(
+                "DeepCircM6A is unavailable. MS evidence evaluation will continue, but m6A-related "
+                "translation-potential scoring will be incomplete."
+            )
+        _ensure_executable_on_path("diamond")
 
-    return run_translation_validation(
-        circ_seq=circ_seq,
-        circ_info_omit_file=_circ_info,
-        circ_orf=circ_orf,
-        circ_mapping=circ_mapping,
-        path_ms_input=args.path_ms_input,
-        file_input_protein=args.canonical_protein,
-        file_out=str(out_dir),
-        deepcip_path=deepcip_path,
-        deepcip_python=deepcip_python,
-        deepcircm6a_path=deepcircm6a_path,
-    )
+        return run_translation_validation(
+            circ_seq=circ_seq,
+            circ_info_omit_file=_circ_info,
+            circ_orf=circ_orf,
+            circ_mapping=circ_mapping,
+            path_ms_input=args.path_ms_input,
+            file_input_protein=args.canonical_protein,
+            file_out=str(out_dir),
+            deepcip_path=deepcip_path,
+            deepcip_python=deepcip_python,
+            deepcircm6a_path=deepcircm6a_path,
+        )

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from .cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
-from .core import CLIUsageError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir
+from .core import CLIUsageError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir, module_file_log
 from .differential_expression.command_runner import run_differential_analysis
 from .differential_expression.workflow_strategy import STRATEGY_REGISTRY
 from .fragpipe_workflows import default_workflow_for_command
@@ -611,8 +611,9 @@ def run_quant_pipeline(args: argparse.Namespace) -> int:
             "DEA skipped: fewer than two groups were detected in the manifest. "
             f"Detected groups: {conditions or ['<none>']}."
         )
-        (skip_dir / "dea_skipped.txt").write_text(message + "\n", encoding="utf-8")
-        log.warning(message)
+        with module_file_log(skip_dir):
+            (skip_dir / "dea_skipped.txt").write_text(message + "\n", encoding="utf-8")
+            log.warning(message)
         _log_stage_complete(4, 4, "Differential Expression Analysis", skip_dir, skip_dir / "dea_skipped.txt")
         _debug_report(
             "C",
