@@ -90,7 +90,13 @@ def add_dea_subparser(subparsers: argparse._SubParsersAction) -> argparse.Argume
             "rows proceed to roll-up. Low-detection protein filtering before imputation still applies."
         ),
     )
-    p.add_argument("-de", "--design", metavar="<FILE>", required=True, help="Path to the sample design or metadata table (.txt or .tsv).")
+    p.add_argument(
+        "-de",
+        "--design",
+        metavar="<FILE>",
+        required=True,
+        help="Path to a two-column sample/condition table (.txt or .tsv); header is optional.",
+    )
     p.add_argument(
         "-o",
         "--output-dir",
@@ -175,8 +181,7 @@ def _run_differential_analysis_impl(
         design = parse_design(args.design)
     except FileNotFoundError as exc:
         raise CLIUsageError(
-            f"-de design file not found: '{args.design}'. "
-            "Provide an existing TSV with columns 'sample' and 'condition'."
+            f"-de design file not found: '{args.design}'."
         ) from exc
     except ValueError as exc:
         raise CLIUsageError(f"-de design file is invalid: {exc}") from exc
