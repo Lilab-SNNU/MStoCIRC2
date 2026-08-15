@@ -80,7 +80,7 @@ Default location:
 
 | File or pattern | Description |
 | --- | --- |
-| `decoys-contam-database.fasta` | Combined target-decoy FASTA assembled from circRNA ORFs and canonical proteins for FragPipe-based searching. |
+| `decoys-contam-database.fasta` | Combined target-decoy FASTA assembled from circRNA ORFs, canonical proteins, and bundled contaminant sequences for FragPipe-based searching. |
 | `fragpipe_input.fp-manifest` | FragPipe-normalized manifest regenerated from the user manifest so that headless FragPipe receives a valid four-column input table. |
 | `run.workflow` | Workflow template copied and rewritten with the absolute database path for the current run. |
 | `fragpipe.run.log` | Live headless FragPipe execution log capturing the launch command and streamed runtime output. |

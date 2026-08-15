@@ -11,7 +11,7 @@ import pandas as pd
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) != 2:
-        raise SystemExit("Usage: python -m mstocirc2.differential_expression.directlfq_bridge <input.pkl> <output.pkl>")
+        raise SystemExit("Usage: python -m mstocirc2.DEA.directlfq_bridge <input.pkl> <output.pkl>")
 
     input_path = Path(args[0])
     output_path = Path(args[1])

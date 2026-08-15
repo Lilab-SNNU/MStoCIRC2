@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .core import CLIUsageError
 
-DEFAULT_WORKFLOW_DIR = Path(__file__).resolve().parent / "spectral_searching" / "workflows"
+DEFAULT_WORKFLOW_DIR = Path(__file__).resolve().parent / "Search" / "workflows"
 DEFAULT_NON_QUANT_WORKFLOW = DEFAULT_WORKFLOW_DIR / "MStoCIRC2_non_quant.workflow"
 DEFAULT_QUANT_WORKFLOW = DEFAULT_WORKFLOW_DIR / "MStoCIRC2_quant.workflow"
 DEFAULT_DIA_WORKFLOW = DEFAULT_WORKFLOW_DIR / "MStoCIRC2_DIA.workflow"

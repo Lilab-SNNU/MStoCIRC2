@@ -11,7 +11,7 @@ from ..cli_ui import CLIHelpFormatter, branded_description, help_block, join_blo
 from ..core import CLIUsageError, DependencyError, make_default_module_output_dir, module_file_log, require_command
 from .paper_pipeline import resolve_predictor_path, run_translation_validation
 
-log = logging.getLogger("translation_validation")
+log = logging.getLogger("Eval")
 _DEEPCIP_ENV = "MSTOCIRC2_DEEPCIP_PATH"
 _DEEPCIP_PYTHON_ENV = "MSTOCIRC2_DEEPCIP_PYTHON"
 

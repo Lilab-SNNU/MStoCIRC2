@@ -67,7 +67,7 @@ def _run_directlfq(long_df: pd.DataFrame, design_samples: List[str]) -> pd.DataF
             [
                 sys.executable,
                 "-m",
-                "mstocirc2.differential_expression.directlfq_bridge",
+                "mstocirc2.DEA.directlfq_bridge",
                 str(input_path),
                 str(output_path),
             ],

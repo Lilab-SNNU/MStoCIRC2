@@ -1,5 +1,5 @@
 """
-Mass Spectrometry Translation Validation Module.
+Eval – Mass spectrometry translation evidence evaluation.
 """
 from .command_runner import run_eval
 

@@ -18,7 +18,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 
 from ..core import MStoCIRC2Error
-from ..orf_prediction.bsj_truncator import extract_gene_from_orf_header, is_meaningful_gene
+from ..ORF.bsj_truncator import extract_gene_from_orf_header, is_meaningful_gene
 from .evidence_scorer import (
     build_source_bsj_location,
     is_peptide_crossing_bsj,

@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 from typing import Dict, List
 
-from ..orf_prediction.bsj_truncator import (
+from ..ORF.bsj_truncator import (
     HEADER_RE,
     orf_coords_to_zero_based,
     orf_effective_coding_nt_len,

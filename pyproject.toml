@@ -45,14 +45,15 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "mstocirc2" = [
-    "differential_expression/kegg_organisms.json",
-    "spectral_searching/workflows/MStoCIRC2_DIA.workflow",
-    "spectral_searching/workflows/MStoCIRC2_non_quant.workflow",
-    "spectral_searching/workflows/MStoCIRC2_quant.workflow",
-    "translation_validation/Deepcircm6a/checkpoint.pth.tar",
-    "translation_validation/Deepcircm6a/model_one_hot_NCP_EIIP.py",
-    "translation_validation/Deepcircm6a/predict.py",
-    "translation_validation/Deepcircm6a/seq_load_one_hot_NCP_EIIP.py",
+    "DEA/kegg_organisms.json",
+    "Search/contam.fasta",
+    "Search/workflows/MStoCIRC2_DIA.workflow",
+    "Search/workflows/MStoCIRC2_non_quant.workflow",
+    "Search/workflows/MStoCIRC2_quant.workflow",
+    "Eval/Deepcircm6a/checkpoint.pth.tar",
+    "Eval/Deepcircm6a/model_one_hot_NCP_EIIP.py",
+    "Eval/Deepcircm6a/predict.py",
+    "Eval/Deepcircm6a/seq_load_one_hot_NCP_EIIP.py",
 ]
 
 [tool.setuptools_scm]

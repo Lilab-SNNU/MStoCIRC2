@@ -9,7 +9,7 @@ KEGG_ORGANISM_SOURCE = "https://www.genome.jp/kegg/tables/br08606.html"
 
 @lru_cache(maxsize=1)
 def load_kegg_organism_records() -> list[dict[str, object]]:
-    data_path = files("mstocirc2.differential_expression").joinpath("kegg_organisms.json")
+    data_path = files("mstocirc2.DEA").joinpath("kegg_organisms.json")
     return json.loads(data_path.read_text(encoding="utf-8"))
 
 

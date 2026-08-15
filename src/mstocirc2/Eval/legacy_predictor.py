@@ -7,7 +7,7 @@ import re
 import logging
 from pathlib import Path
 
-from ..orf_prediction.bsj_truncator import orf_coords_to_zero_based
+from ..ORF.bsj_truncator import orf_coords_to_zero_based
 
 log = logging.getLogger(__name__)
 

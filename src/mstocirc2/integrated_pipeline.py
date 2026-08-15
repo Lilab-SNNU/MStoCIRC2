@@ -10,12 +10,12 @@ from typing import Iterable, Sequence
 
 from .cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
 from .core import CLIUsageError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir, module_file_log
-from .differential_expression.command_runner import run_differential_analysis
-from .differential_expression.workflow_strategy import STRATEGY_REGISTRY
+from .DEA.command_runner import run_differential_analysis
+from .DEA.workflow_strategy import STRATEGY_REGISTRY
 from .fragpipe_workflows import default_workflow_for_command
-from .orf_prediction.command_runner import run_orf_prediction
-from .spectral_searching.command_runner import resolve_search_runtime, run_search
-from .translation_validation.command_runner import run_eval
+from .ORF.command_runner import run_orf_prediction
+from .Search.command_runner import resolve_search_runtime, run_search
+from .Eval.command_runner import run_eval
 
 log = logging.getLogger(__name__)
 _PIPELINE_RULE = "=" * 86

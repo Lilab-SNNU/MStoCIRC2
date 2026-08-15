@@ -11,11 +11,11 @@ from pathlib import Path
 
 from .cli_ui import CLIHelpFormatter, branded_description, emit_completion_banner, emit_startup_banner
 from .core import CLIUsageError, MStoCIRC2Error, configure_logging
-from .differential_expression.command_runner import add_dea_subparser
+from .DEA.command_runner import add_dea_subparser
 from .integrated_pipeline import add_integrated_subparsers
-from .orf_prediction.command_runner import add_orf_subparser
-from .spectral_searching.command_runner import add_search_subparser
-from .translation_validation.command_runner import add_eval_subparser
+from .ORF.command_runner import add_orf_subparser
+from .Search.command_runner import add_search_subparser
+from .Eval.command_runner import add_eval_subparser
 
 Runner = Callable[[argparse.Namespace], int]
 log = logging.getLogger(__name__)

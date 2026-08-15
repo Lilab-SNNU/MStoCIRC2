@@ -455,7 +455,7 @@ def _run_differential_analysis_impl(
 
     metadata = {
         "tool": "MStoCIRC2",
-        "module": "differential_expression",
+        "module": "DEA",
         "strategy": args.strategy,
         "organism": args.organism,
         "organism_label": describe_kegg_organism(args.organism),

@@ -19,7 +19,7 @@ from .fasta_assembler import assemble_database
 from .engine_executor import run_fragpipe
 from .workflow_injector import inject_database_path
 
-log = logging.getLogger("spectral_searching")
+log = logging.getLogger("Search")
 
 _DIA_REQUIRED_PYTHON_PACKAGES = ("fragpipe-speclib", "easypqp", "lxml")
 _FRAGPIPE_PYTHON_ENV = "MSTOCIRC2_FRAGPIPE_PYTHON"
