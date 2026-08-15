@@ -22,8 +22,7 @@ def _generate_decoy(record: SeqRecord) -> SeqRecord:
         decoy_seq = seq_str[::-1]
 
     decoy_id = f"rev_{record.id}"
-    # description: copy original description, will be tagged later
-    return SeqRecord(Seq(decoy_seq), id=decoy_id, description=record.description)
+    return SeqRecord(Seq(decoy_seq), id=decoy_id, name=decoy_id, description="")
 
 
 def _read_records(fasta_path: str) -> List[SeqRecord]:
