@@ -202,18 +202,18 @@ def _run_differential_analysis_impl(
     log.info("  peptide matrix: %s (format: %s)", peptide_df.shape, matrix_fmt)
 
     circ_ref_peptides: set[str] = set()
-    circ_orf_ids: set[str] = set()
+    search_orf_ids: set[str] = set()
     circ_reference_provided = bool(args.circrna_reference and str(args.circrna_reference).strip())
     if circ_reference_provided:
         try:
-            _, circ_ref_peptides, circ_orf_ids = parse_circrna_reference(args.circrna_reference)
+            _, circ_ref_peptides, search_orf_ids = parse_circrna_reference(args.circrna_reference)
         except FileNotFoundError as exc:
             raise CLIUsageError(
                 f"-cr circRNA reference not found: '{args.circrna_reference}'."
             ) from exc
         except ValueError as exc:
             raise CLIUsageError(f"-cr circRNA reference is invalid: {exc}") from exc
-        log.info("  circRef_Set: %d peptides, %d ORF IDs", len(circ_ref_peptides), len(circ_orf_ids))
+        log.info("  circRef_Set: %d peptides, %d ORF IDs", len(circ_ref_peptides), len(search_orf_ids))
     else:
         log.info(
             "-cr not provided: skipping circRNA–linear homology peptide filtering; "
@@ -231,7 +231,7 @@ def _run_differential_analysis_impl(
 
     if circ_reference_provided:
         filtered, filter_report, filter_summary = filter_peptides(
-            peptide_df, circ_ref_peptides, circ_orf_ids
+            peptide_df, circ_ref_peptides, search_orf_ids
         )
         filter_report.to_csv(out / "peptide_filter_report.tsv", sep="\t", index=False)
         log.info("Filter: %s", filter_summary)
@@ -298,7 +298,7 @@ def _run_differential_analysis_impl(
         filtered,
         sample_cols,
         strategy.expression_matrix_type,
-        circ_orf_ids,
+        search_orf_ids,
         pre_filter_counts,
     )
     log.info(

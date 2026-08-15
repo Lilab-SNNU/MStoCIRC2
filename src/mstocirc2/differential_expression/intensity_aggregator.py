@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from .homology_refining import (
     STRIPPED_SEQ_CANDIDATES, PROTEIN_ASSIGN_CANDIDATES,
-    _first_present, looks_like_circrna_id,
+    _first_present, is_circrna_search_id,
 )
 
 log = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ def rollup_peptides_to_proteins(
     peptide_df: pd.DataFrame,
     sample_columns: Dict[str, str],
     expression_matrix_type: str,
-    circ_orf_ids: Set[str],
+    search_orf_ids: Set[str],
     pre_filter_counts: pd.Series | None = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     design_samples = list(sample_columns.keys())
@@ -156,7 +156,7 @@ def rollup_peptides_to_proteins(
     summary["removed_peptides"] = (
         summary["input_peptide_count"] - summary["retained_peptide_count"])
     summary["is_circrna"] = summary.index.to_series().apply(
-        lambda pid: looks_like_circrna_id(pid, circ_orf_ids))
+        lambda pid: is_circrna_search_id(pid, search_orf_ids))
     summary = summary.reset_index()
     summary = summary[["protein_id", "input_peptide_count",
                        "retained_peptide_count", "removed_peptides", "is_circrna"]]

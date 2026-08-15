@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Set
 import pandas as pd
 
+from .homology_refining import normalize_protein_id
+
 log = logging.getLogger(__name__)
 _TABLE_ENCODINGS = ("utf-8", "utf-8-sig", "utf-16", "utf-16-le", "utf-16-be")
 
@@ -119,11 +121,17 @@ _COUNT_SUFFIX_RE = re.compile(r"\(\d+(?:\|\d+)?\)\s*$")
 
 def parse_circrna_reference(path: str) -> Tuple[pd.DataFrame, Set[str], Set[str]]:
     df = _read_table(path)
-    missing = [c for c in ("circ_ORF_ID", "peptide_seq") if c not in df.columns]
+    missing = [c for c in ("search_ORF_IDs", "peptide_seq") if c not in df.columns]
     if missing:
         raise ValueError(f"CircRNA_Reference missing column(s): {missing}")
-    circ_orf_ids: Set[str] = set(df["circ_ORF_ID"].dropna().astype(str).str.strip())
-    circ_orf_ids.discard("")
+    search_orf_ids: Set[str] = set()
+    for entry in df["search_ORF_IDs"].dropna().astype(str):
+        for piece in entry.split(";"):
+            piece = normalize_protein_id(piece.strip())
+            if piece:
+                search_orf_ids.add(piece)
+    if not search_orf_ids:
+        raise ValueError("CircRNA_Reference has no valid search_ORF_IDs entries")
     circ_ref_peptides: Set[str] = set()
     raw_total = 0
     for entry in df["peptide_seq"].dropna().astype(str):
@@ -137,7 +145,7 @@ def parse_circrna_reference(path: str) -> Tuple[pd.DataFrame, Set[str], Set[str]
                 circ_ref_peptides.add(piece.upper())
     if not circ_ref_peptides:
         raise ValueError("CircRNA_Reference has no valid peptide_seq entries")
-    return df, circ_ref_peptides, circ_orf_ids
+    return df, circ_ref_peptides, search_orf_ids
 
 
 def _design_condition_ok(series: pd.Series) -> bool:
