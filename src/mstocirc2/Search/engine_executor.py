@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("Search")
 
 
 def run_fragpipe(
@@ -69,7 +69,7 @@ def run_fragpipe(
             handle.flush()
             text = line.rstrip()
             if text:
-                log.info("[FragPipe] %s", text)
+                log.info("%s", text)
 
         return_code = proc.wait()
 

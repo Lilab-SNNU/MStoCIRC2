@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import shutil
 import time
 from pathlib import Path
 import numpy as np
@@ -26,7 +27,7 @@ from .functional_enrichment import run_enrichment
 from .expression_visualizer import volcano_plot
 from .kegg_registry import describe_kegg_organism, normalize_kegg_organism
 
-log = logging.getLogger("circrna_dea")
+log = logging.getLogger("DEA")
 
 _CORRELATION_METHOD = "pearson"
 _TOP_PROXY_MRNA = 100
@@ -187,7 +188,13 @@ def _run_differential_analysis_impl(
         raise CLIUsageError(f"-de design file is invalid: {exc}") from exc
 
     conds = design["condition"].unique().tolist()
-    log.info("  design: %d samples, conditions: %s", len(design), conds)
+    group_sizes = [int((design["condition"] == c).sum()) for c in conds]
+    log.info(
+        "design: %d samples, conditions: %s（%s）",
+        len(design),
+        conds,
+        " vs. ".join(str(n) for n in group_sizes),
+    )
 
     try:
         peptide_df, matrix_fmt = load_peptide_matrix(
@@ -471,5 +478,9 @@ def _run_differential_analysis_impl(
     }
     with open(out / "run_metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False, default=str)
+    design_src = Path(args.design).expanduser().resolve()
+    design_dst = (out / "design.txt").resolve()
+    if design_src != design_dst:
+        shutil.copy2(design_src, design_dst)
     log.info("Done. Output: %s", out.resolve())
     return 0

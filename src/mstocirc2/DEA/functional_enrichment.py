@@ -137,6 +137,24 @@ def _standardise(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
+def _title_case_kegg_text(value: object) -> str:
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return text
+    return " ".join(
+        (token[0].upper() + token[1:].lower()) if token else token
+        for token in text.split(" ")
+    )
+
+
+def _title_case_kegg_terms(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for col in ("term_description", "term_id"):
+        if col in out.columns:
+            out[col] = out[col].map(_title_case_kegg_text)
+    return out
+
+
 def _p_col(use_adj_p: bool) -> str:
     return "adj_p_value" if use_adj_p else "p_value"
 
@@ -306,7 +324,7 @@ def _plot_go(
     ax.set_yticks(y)
     ax.set_yticklabels(labels, fontsize=17.0)
     ax.set_xlabel("Gene Ratio", fontsize=20)
-    ax.set_title(f"{title_tag} — GO {plot_type} ({p_label}<0.05)", fontsize=24, pad=16)
+    ax.set_title(f"{title_tag} — GO", fontsize=24, pad=16)
     ax.grid(axis="x", ls=":", color="#CCC", alpha=0.7)
     ax.set_axisbelow(True)
     ax.set_xlim(0, gene_ratio.max() * 1.2)
@@ -357,11 +375,11 @@ def _plot_kegg(
         sizes = 40 + 120 * (log_gc - log_gc.min()) / (log_gc.max() - log_gc.min() + 1e-6)
         ax.scatter(gene_ratio, y, s=sizes, c=colors, edgecolors="#333", linewidths=0.5)
 
-    labels = sig["term_description"].astype(str).str.slice(0, 65)
+    labels = sig["term_description"].map(_title_case_kegg_text).astype(str).str.slice(0, 65)
     ax.set_yticks(y)
     ax.set_yticklabels(labels, fontsize=12.75)
     ax.set_xlabel("Gene Ratio", fontsize=15.0)
-    ax.set_title(f"{title_tag} — KEGG {plot_type} ({p_label}<0.05)", fontsize=18.0, pad=12)
+    ax.set_title(f"{title_tag} — KEGG", fontsize=18.0, pad=12)
     ax.grid(axis="x", ls=":", color="#CCC", alpha=0.7)
     ax.set_axisbelow(True)
     ax.set_xlim(0, gene_ratio.max() * 1.2)
@@ -424,6 +442,8 @@ def run_enrichment(
                 pd.DataFrame().to_csv(tsv_path, sep="\t", index=False)
                 continue
             df = _standardise(df)
+            if kind == "kegg":
+                df = _title_case_kegg_terms(df)
             df.to_csv(tsv_path, sep="\t", index=False)
             results[kind] = df
         except Exception as exc:

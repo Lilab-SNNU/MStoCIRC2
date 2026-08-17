@@ -18,7 +18,7 @@ from .sequence_exporter import (
     write_final_outputs,
 )
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ORF")
 DEFAULT_START_CODONS = ["ATG", "TTG", "CTG", "GTG"]
 
 

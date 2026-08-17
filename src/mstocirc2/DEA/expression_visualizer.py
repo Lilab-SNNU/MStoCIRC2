@@ -161,7 +161,7 @@ def volcano_plot(
     ax.set_xlabel(r"$\log_2$ Fold Change", fontsize=12)
     ax.set_ylabel(f"$-\\log_{{10}}$ ({p_display})", fontsize=12)
     ax.set_title(
-        f"Volcano: {group_a} vs {group_b}" if group_a else "Volcano",
+        f"{group_a} vs {group_b}" if group_a else "",
         fontsize=13,
         pad=10,
     )

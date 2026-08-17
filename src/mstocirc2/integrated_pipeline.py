@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 from .cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
-from .core import CLIUsageError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir, module_file_log
+from .core import CLIUsageError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir, module_file_log, module_log_context
 from .DEA.command_runner import run_differential_analysis
 from .DEA.workflow_strategy import STRATEGY_REGISTRY
 from .fragpipe_workflows import default_workflow_for_command
@@ -544,27 +544,30 @@ def run_non_quant_pipeline(args: argparse.Namespace) -> int:
     log.info("Mode     | nonquant")
     _log_pipeline_start("nonquant", root_out, workflow, args.manifest)
     orf_outdir = _resolve_stage_output(root_out, args.orf_output_dir, "orf")
-    _log_stage_banner(1, 3, "ORF Prediction", orf_outdir)
-    orf_dir = _run_orf_stage(args, orf_outdir)
-    _log_stage_complete(1, 3, "ORF Prediction", orf_dir, orf_dir / "circRNA_bsj_corf.fasta")
+    with module_log_context("ORF"):
+        _log_stage_banner(1, 3, "ORF", orf_outdir)
+        orf_dir = _run_orf_stage(args, orf_outdir)
+        _log_stage_complete(1, 3, "ORF", orf_dir, orf_dir / "circRNA_bsj_corf.fasta")
     search_outdir = _resolve_stage_output(root_out, args.search_output_dir, "search")
-    _log_stage_banner(2, 3, "Spectral Search", search_outdir)
-    search_dir = _run_search_stage(
-        args,
-        circ_orf_path=str(orf_dir / "circRNA_bsj_corf.fasta"),
-        search_outdir=search_outdir,
-        workflow=workflow,
-    )
-    _log_stage_complete(2, 3, "Spectral Search", search_dir, search_dir / "fragpipe.run.log")
+    with module_log_context("Search"):
+        _log_stage_banner(2, 3, "Search", search_outdir)
+        search_dir = _run_search_stage(
+            args,
+            circ_orf_path=str(orf_dir / "circRNA_bsj_corf.fasta"),
+            search_outdir=search_outdir,
+            workflow=workflow,
+        )
+        _log_stage_complete(2, 3, "Search", search_dir, search_dir / "fragpipe.run.log")
     eval_outdir = _resolve_stage_output(root_out, args.eval_output_dir, "eval")
-    _log_stage_banner(3, 3, "Translation Evaluation", eval_outdir)
-    eval_dir = _run_eval_stage(
-        args,
-        orf_dir=orf_dir,
-        search_dir=search_dir,
-        eval_outdir=eval_outdir,
-    )
-    _log_stage_complete(3, 3, "Translation Evaluation", eval_dir, eval_dir / "circ_translation_evidence.tsv")
+    with module_log_context("Eval"):
+        _log_stage_banner(3, 3, "Eval", eval_outdir)
+        eval_dir = _run_eval_stage(
+            args,
+            orf_dir=orf_dir,
+            search_dir=search_dir,
+            eval_outdir=eval_outdir,
+        )
+        _log_stage_complete(3, 3, "Eval", eval_dir, eval_dir / "circ_translation_evidence.tsv")
     return 0
 
 
@@ -581,54 +584,58 @@ def run_quant_pipeline(args: argparse.Namespace) -> int:
     _log_pipeline_start("quant", root_out, workflow, args.manifest)
     log.info("Groups   | %s", ", ".join(conditions) if conditions else "<none>")
     orf_outdir = _resolve_stage_output(root_out, args.orf_output_dir, "orf")
-    _log_stage_banner(1, 4, "ORF Prediction", orf_outdir)
-    orf_dir = _run_orf_stage(args, orf_outdir)
-    _log_stage_complete(1, 4, "ORF Prediction", orf_dir, orf_dir / "circRNA_bsj_corf.fasta")
+    with module_log_context("ORF"):
+        _log_stage_banner(1, 4, "ORF", orf_outdir)
+        orf_dir = _run_orf_stage(args, orf_outdir)
+        _log_stage_complete(1, 4, "ORF", orf_dir, orf_dir / "circRNA_bsj_corf.fasta")
     search_outdir = _resolve_stage_output(root_out, args.search_output_dir, "search")
-    _log_stage_banner(2, 4, "Quantitative Spectral Search", search_outdir)
-    search_dir = _run_search_stage(
-        args,
-        circ_orf_path=str(orf_dir / "circRNA_bsj_corf.fasta"),
-        search_outdir=search_outdir,
-        workflow=workflow,
-    )
-    _log_stage_complete(2, 4, "Quantitative Spectral Search", search_dir, search_dir / "fragpipe.run.log")
+    with module_log_context("Search"):
+        _log_stage_banner(2, 4, "Search", search_outdir)
+        search_dir = _run_search_stage(
+            args,
+            circ_orf_path=str(orf_dir / "circRNA_bsj_corf.fasta"),
+            search_outdir=search_outdir,
+            workflow=workflow,
+        )
+        _log_stage_complete(2, 4, "Search", search_dir, search_dir / "fragpipe.run.log")
     eval_outdir = _resolve_stage_output(root_out, args.eval_output_dir, "eval")
-    _log_stage_banner(3, 4, "Translation Evaluation", eval_outdir)
-    eval_dir = _run_eval_stage(
-        args,
-        orf_dir=orf_dir,
-        search_dir=search_dir,
-        eval_outdir=eval_outdir,
-    )
-    _log_stage_complete(3, 4, "Translation Evaluation", eval_dir, eval_dir / "circ_translation_evidence.tsv")
+    with module_log_context("Eval"):
+        _log_stage_banner(3, 4, "Eval", eval_outdir)
+        eval_dir = _run_eval_stage(
+            args,
+            orf_dir=orf_dir,
+            search_dir=search_dir,
+            eval_outdir=eval_outdir,
+        )
+        _log_stage_complete(3, 4, "Eval", eval_dir, eval_dir / "circ_translation_evidence.tsv")
     dea_outdir = _resolve_stage_output(root_out, args.dea_output_dir, "dea")
-    _log_stage_banner(4, 4, "Differential Expression Analysis", dea_outdir)
-    if len(conditions) < 2:
-        skip_dir = Path(dea_outdir)
-        skip_dir.mkdir(parents=True, exist_ok=True)
-        message = (
-            "DEA skipped: fewer than two groups were detected in the manifest. "
-            f"Detected groups: {conditions or ['<none>']}."
+    with module_log_context("DEA"):
+        _log_stage_banner(4, 4, "DEA", dea_outdir)
+        if len(conditions) < 2:
+            skip_dir = Path(dea_outdir)
+            skip_dir.mkdir(parents=True, exist_ok=True)
+            message = (
+                "DEA skipped: fewer than two groups were detected in the manifest. "
+                f"Detected groups: {conditions or ['<none>']}."
+            )
+            with module_file_log(skip_dir):
+                (skip_dir / "dea_skipped.txt").write_text(message + "\n", encoding="utf-8")
+                log.warning(message)
+            _log_stage_complete(4, 4, "DEA", skip_dir, skip_dir / "dea_skipped.txt")
+            _debug_report(
+                "C",
+                "integrated_pipeline.run_quant_pipeline:skip_dea",
+                "[DEBUG] skipping DEA because fewer than two groups were detected",
+                {"conditions": conditions, "dea_dir": str(skip_dir)},
+            )
+            return 0
+        dea_dir = _run_dea_stage(
+            args,
+            search_dir=search_dir,
+            eval_dir=eval_dir,
+            dea_outdir=dea_outdir,
         )
-        with module_file_log(skip_dir):
-            (skip_dir / "dea_skipped.txt").write_text(message + "\n", encoding="utf-8")
-            log.warning(message)
-        _log_stage_complete(4, 4, "Differential Expression Analysis", skip_dir, skip_dir / "dea_skipped.txt")
-        _debug_report(
-            "C",
-            "integrated_pipeline.run_quant_pipeline:skip_dea",
-            "[DEBUG] skipping DEA because fewer than two groups were detected",
-            {"conditions": conditions, "dea_dir": str(skip_dir)},
-        )
-        return 0
-    dea_dir = _run_dea_stage(
-        args,
-        search_dir=search_dir,
-        eval_dir=eval_dir,
-        dea_outdir=dea_outdir,
-    )
-    _log_stage_complete(4, 4, "Differential Expression Analysis", dea_dir, dea_dir / "run_metadata.json")
+        _log_stage_complete(4, 4, "DEA", dea_dir, dea_dir / "run_metadata.json")
     return 0
 
 

@@ -6,9 +6,48 @@ import logging
 import shutil
 import sys
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator
+
+_MODULE_TAG: ContextVar[str | None] = ContextVar("mstocirc2_module_tag", default=None)
+
+_LOGGER_MODULE_TAGS = {
+    "ORF": "ORF",
+    "Search": "Search",
+    "Eval": "Eval",
+    "DEA": "DEA",
+    "circrna_dea": "DEA",
+}
+
+_PACKAGE_MODULE_PREFIXES = (
+    ("mstocirc2.ORF", "ORF"),
+    ("mstocirc2.Search", "Search"),
+    ("mstocirc2.Eval", "Eval"),
+    ("mstocirc2.DEA", "DEA"),
+)
+
+
+def _resolve_module_tag(logger_name: str) -> str | None:
+    tag = _MODULE_TAG.get()
+    if tag:
+        return tag
+    if logger_name in _LOGGER_MODULE_TAGS:
+        return _LOGGER_MODULE_TAGS[logger_name]
+    for prefix, mapped in _PACKAGE_MODULE_PREFIXES:
+        if logger_name == prefix or logger_name.startswith(prefix + "."):
+            return mapped
+    return None
+
+
+@contextmanager
+def module_log_context(module_name: str) -> Iterator[None]:
+    token = _MODULE_TAG.set(module_name)
+    try:
+        yield
+    finally:
+        _MODULE_TAG.reset(token)
 
 
 class TerminalProgressBar:
@@ -46,13 +85,23 @@ class CompactCliFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         message = record.getMessage()
+        tag = _resolve_module_tag(record.name)
         if record.levelno >= logging.ERROR:
-            return f"[ERROR] {message}"
-        if record.levelno >= logging.WARNING:
-            return f"[WARN] {message}"
-        if record.levelno == logging.DEBUG:
-            return f"[DEBUG] {record.name}: {message}"
-        return message
+            prefix = "[ERROR]"
+        elif record.levelno >= logging.WARNING:
+            prefix = "[WARN]"
+        elif record.levelno == logging.DEBUG:
+            prefix = "[DEBUG]"
+        else:
+            prefix = f"[{tag}]" if tag else None
+            if prefix:
+                return f"{prefix} {message}"
+            return message
+        if tag and prefix != "[DEBUG]":
+            return f"[{tag}] {prefix} {message}"
+        if prefix == "[DEBUG]":
+            return f"{prefix} {record.name}: {message}"
+        return f"{prefix} {message}"
 
 
 def configure_logging(verbose: int = 0, quiet: bool = False) -> None:

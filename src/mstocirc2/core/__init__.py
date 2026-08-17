@@ -1,7 +1,7 @@
 """Shared infrastructure for the MStoCIRC2 CLI."""
 
 from .exceptions import CLIUsageError, DependencyError, ExternalCommandError, MStoCIRC2Error
-from .logging_utils import TerminalProgressBar, configure_logging, module_file_log
+from .logging_utils import TerminalProgressBar, configure_logging, module_file_log, module_log_context
 from .paths import (
     coerce_path,
     ensure_directory,
@@ -19,6 +19,7 @@ __all__ = [
     "TerminalProgressBar",
     "configure_logging",
     "module_file_log",
+    "module_log_context",
     "coerce_path",
     "ensure_directory",
     "ensure_empty_directory",
