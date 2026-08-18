@@ -52,7 +52,7 @@ def filter_by_references(records: List[Dict[str, Any]], ref_fastas: List[str], k
         cur_filtered = []
         for idx_f, r in enumerate(cur):
             if (idx_f + 1) % 50000 == 0 or idx_f + 1 == total_cur:
-                log.info("[ORF] Homology filter (%s): %d/%d", Path(rf).name, idx_f + 1, total_cur)
+                log.info("Homology filter (%s): %d/%d", Path(rf).name, idx_f + 1, total_cur)
             if not contained(r['sequence'], exact, seqs, idx, kmer_size):
                 cur_filtered.append(r)
         cur = sorted(cur_filtered, key=lambda r:r['order'])

@@ -58,7 +58,6 @@ Default location:
 | File or pattern | Description |
 | --- | --- |
 | `circRNA_full_length.fasta` | Full-length mature circRNA nucleotide FASTA exported by the ORF stage and used as the sequence foundation for downstream translation evaluation. |
-| `circRNA_all_ORF.fasta` | Raw translated ORF amino-acid FASTA before final deduplication restoration and final export filtering. |
 | `circRNA_bsj_corf.fasta` | Final amino-acid FASTA of BSJ-aware circRNA ORFs that is consumed by downstream `search` and `eval` modules. |
 | `circRNA_bsj_corf_nt.fasta` | Nucleotide-sequence counterpart of `circRNA_bsj_corf.fasta`, preserving the final ORF set in nucleotide form. |
 | `circRNA_ORF_mapping.tsv` | Mapping table linking each exported final ORF to its source ORF header, source amino-acid sequence, and source nucleotide sequence. |

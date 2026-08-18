@@ -111,7 +111,7 @@ def choose_best_event(
         cover = min(up_max, ev['aa_idx']-1) + min(down_max, len(e['aa_no_stop'])-ev['aa_idx'])
         score = (
             cover,
-            -len(e['aa_no_stop']),
+            len(e['aa_no_stop']),
             start_codon_priority.get(e['codon'], 0),
             -e['start'],
             -e['order'],

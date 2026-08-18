@@ -56,7 +56,7 @@ def write_final_outputs(out_circ_file: str, final_records: List[Dict[str, Any]])
 
 def cleanup_intermediate_files(out_circ_file: str, use_sequence_mode: bool) -> None:
     out_dir = Path(out_circ_file)
-    kept = {'circRNA_full_length.fasta', 'circRNA_all_ORF.fasta', 'circRNA_bsj_corf.fasta',
+    kept = {'circRNA_full_length.fasta', 'circRNA_bsj_corf.fasta',
             'circRNA_bsj_corf_nt.fasta', 'circRNA_ORF_mapping.tsv'}
     if not use_sequence_mode:
         kept.add('circ_info_omit.gff')

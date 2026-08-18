@@ -13,33 +13,6 @@ from typing import Iterator
 
 _MODULE_TAG: ContextVar[str | None] = ContextVar("mstocirc2_module_tag", default=None)
 
-_LOGGER_MODULE_TAGS = {
-    "ORF": "ORF",
-    "Search": "Search",
-    "Eval": "Eval",
-    "DEA": "DEA",
-    "circrna_dea": "DEA",
-}
-
-_PACKAGE_MODULE_PREFIXES = (
-    ("mstocirc2.ORF", "ORF"),
-    ("mstocirc2.Search", "Search"),
-    ("mstocirc2.Eval", "Eval"),
-    ("mstocirc2.DEA", "DEA"),
-)
-
-
-def _resolve_module_tag(logger_name: str) -> str | None:
-    tag = _MODULE_TAG.get()
-    if tag:
-        return tag
-    if logger_name in _LOGGER_MODULE_TAGS:
-        return _LOGGER_MODULE_TAGS[logger_name]
-    for prefix, mapped in _PACKAGE_MODULE_PREFIXES:
-        if logger_name == prefix or logger_name.startswith(prefix + "."):
-            return mapped
-    return None
-
 
 @contextmanager
 def module_log_context(module_name: str) -> Iterator[None]:
@@ -65,11 +38,13 @@ class TerminalProgressBar:
             return
         current = max(0, min(int(current), self.total))
         columns = shutil.get_terminal_size((100, 20)).columns
-        bar_width = min(self.width, max(10, columns - len(self.prefix) - 28))
+        tag = _MODULE_TAG.get()
+        display_prefix = f"[{tag}] {self.prefix}" if tag else self.prefix
+        bar_width = min(self.width, max(10, columns - len(display_prefix) - 28))
         filled = int(bar_width * current / self.total) if self.total else bar_width
         bar = "#" * filled + "-" * (bar_width - filled)
         percent = 100.0 * current / self.total if self.total else 100.0
-        sys.stderr.write(f"\r{self.prefix} [{bar}] {current}/{self.total} ({percent:5.1f}%)")
+        sys.stderr.write(f"\r{display_prefix} [{bar}] {current}/{self.total} ({percent:5.1f}%)")
         sys.stderr.flush()
 
     def close(self) -> None:
@@ -85,7 +60,7 @@ class CompactCliFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         message = record.getMessage()
-        tag = _resolve_module_tag(record.name)
+        tag = _MODULE_TAG.get()
         if record.levelno >= logging.ERROR:
             prefix = "[ERROR]"
         elif record.levelno >= logging.WARNING:

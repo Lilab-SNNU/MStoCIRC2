@@ -23,7 +23,7 @@ def RNA_protein(
     Mirrors continuous loop transcription to bridge the BSJ.
     """
     seq_len = len(RNA_string)
-    RNA_string_extended = RNA_string * 2 + RNA_string[:flank_len * 3]
+    RNA_string_extended = RNA_string * 4
     protein_table = PROTEIN_TABLE_MT if is_mt_chr else PROTEIN_TABLE_STANDARD
     candidates = []
     start_positions = []; search_seq = RNA_string + RNA_string[:2]
@@ -37,7 +37,7 @@ def RNA_protein(
     
     for start, sc_used in start_positions:
         aa_seq = []; is_rct = False; k = 0
-        max_nt_len = seq_len + flank_len * 3; current_nt_len = 0
+        max_nt_len = 3 * seq_len; current_nt_len = 0
         while True:
             codon = RNA_string_extended[start + k: start + k + 3]
             if len(codon) < 3: break
@@ -90,7 +90,7 @@ def translate_circ_orfs(
 
     with fasta_file.open("r", encoding="utf-8", errors="ignore") as counter_handle:
         total_sequences = sum(1 for line in counter_handle if line.startswith('>'))
-    progress = TerminalProgressBar(total_sequences, "[ORF] Sequence progress")
+    progress = TerminalProgressBar(total_sequences, "Sequence progress")
     raw_records = []
     total_seq_count = 0
 
@@ -129,5 +129,5 @@ def translate_circ_orfs(
             _append_records(cur_h, cur_s)
     progress.close()
 
-    log.info("[ORF] Processed %d sequences. Total raw ORFs found: %d", total_seq_count, len(raw_records))
+    log.info("Processed %d sequences. Total raw ORFs found: %d", total_seq_count, len(raw_records))
     return raw_records

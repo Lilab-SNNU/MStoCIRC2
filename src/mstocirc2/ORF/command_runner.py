@@ -245,11 +245,6 @@ def run_orf_prediction(args: Any) -> int:
             flank_aa_len=args.flank_aa_len,
             start_codons=start_codon_list,
         )
-        raw_orf_path = output_dir / "circRNA_all_ORF.fasta"
-        with raw_orf_path.open("w", encoding="utf-8") as handle:
-            for record in raw_records:
-                handle.write(f">{record['header']}\n{record['sequence']}\n")
-        log.info("Raw ORFs exported: %d", len(raw_records))
 
         log.info("Applying BSJ-aware truncation.")
         stage1 = postprocess_orf_records(
