@@ -138,6 +138,14 @@ def parse_msgf_file(file_path: str, file_line_circ: TextIO, dic_id_peptide: Dict
                         dic_id_peptide = dic_circ_mgf_pep_add(clean_circ_id, file_id, Peptide, dic_id_peptide)
     return dic_id_peptide
 
+def _sample_id_with_file_prefix(file_path: str, sample_name: str) -> str:
+    stem = Path(file_path).stem
+    name = sample_name.strip()
+    if "/" in name or "\\" in name:
+        name = Path(name).stem
+    return f"{stem}_{name}" if name else stem
+
+
 def parse_fragpipe_file(file_path: str, file_line_circ: TextIO, dic_id_peptide: Dict[str, str], global_stats: Dict[str, Any], file_input_protein: str) -> Dict[str, str]:
     with open_safe_read(file_path) as content:
         header_line = content.readline()
@@ -164,7 +172,11 @@ def parse_fragpipe_file(file_path: str, file_line_circ: TextIO, dic_id_peptide: 
             for i, h in enumerate(headers):
                 if h.endswith(' Spectral Count'):
                     sample_name = h.replace(' Spectral Count', '').strip()
-                    sample_cols.append({'idx': i, 'name': sample_name, 'type': 'count'})
+                    sample_cols.append({
+                        'idx': i,
+                        'name': _sample_id_with_file_prefix(file_path, sample_name),
+                        'type': 'count',
+                    })
             
             if not sample_cols and 'Spectral Count' in headers:
                 idx_spec = headers.index('Spectral Count')
@@ -176,8 +188,9 @@ def parse_fragpipe_file(file_path: str, file_line_circ: TextIO, dic_id_peptide: 
                 for i, h in enumerate(headers):
                     if h.endswith(' MaxLFQ Intensity') or h.endswith(' Intensity'):
                         sample_name = h.replace(' MaxLFQ Intensity', '').replace(' Intensity', '').strip()
-                        if not any(s['name'] == sample_name for s in sample_cols):
-                            sample_cols.append({'idx': i, 'name': sample_name, 'type': 'intensity'})
+                        sample_id = _sample_id_with_file_prefix(file_path, sample_name)
+                        if not any(s['name'] == sample_id for s in sample_cols):
+                            sample_cols.append({'idx': i, 'name': sample_id, 'type': 'intensity'})
             
             if not sample_cols:
                 return dic_id_peptide
@@ -243,13 +256,18 @@ def parse_fragpipe_combined_file(file_path: str, file_line_circ: TextIO, dic_id_
         for i, h in enumerate(headers):
             if h.endswith(' Spectral Count'):
                 sample_name = h.replace(' Spectral Count', '').strip()
-                sample_cols.append({'idx': i, 'name': sample_name, 'type': 'count'})
+                sample_cols.append({
+                    'idx': i,
+                    'name': _sample_id_with_file_prefix(file_path, sample_name),
+                    'type': 'count',
+                })
         if not sample_cols:
             for i, h in enumerate(headers):
                 if h.endswith(' MaxLFQ Intensity') or h.endswith(' Intensity'):
                     sample_name = h.replace(' MaxLFQ Intensity', '').replace(' Intensity', '').strip()
-                    if not any(s['name'] == sample_name for s in sample_cols):
-                        sample_cols.append({'idx': i, 'name': sample_name, 'type': 'intensity'})
+                    sample_id = _sample_id_with_file_prefix(file_path, sample_name)
+                    if not any(s['name'] == sample_id for s in sample_cols):
+                        sample_cols.append({'idx': i, 'name': sample_id, 'type': 'intensity'})
         if not sample_cols:
             return dic_id_peptide
         for line in content:
@@ -281,8 +299,6 @@ def parse_fragpipe_combined_file(file_path: str, file_line_circ: TextIO, dic_id_
                     continue
                 if count_val > 0:
                     file_id = sample['name']
-                    if '/' in file_id:
-                        file_id = Path(file_id).stem
                     global_stats['files'].add(file_id)
                     for _ in range(count_val):
                         global_stats['psms'] += 1
