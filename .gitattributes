@@ -5,3 +5,7 @@
 *.jpg binary
 *.jpeg binary
 *.dmnd binary
+*.xlsx binary
+*.xls binary
+*.zip binary
+*.tar.gz binary
