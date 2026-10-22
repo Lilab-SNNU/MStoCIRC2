@@ -9,6 +9,7 @@ from .paths import (
     make_default_module_output_dir,
     make_timestamped_output_dir,
 )
+from .preflight import check_duplicate_cli_options, preflight_cli_args
 from .process import require_command, run_external_command
 
 __all__ = [
@@ -25,6 +26,8 @@ __all__ = [
     "ensure_empty_directory",
     "make_default_module_output_dir",
     "make_timestamped_output_dir",
+    "check_duplicate_cli_options",
+    "preflight_cli_args",
     "require_command",
     "run_external_command",
 ]

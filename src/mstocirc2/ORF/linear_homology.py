@@ -11,7 +11,7 @@ def filter_by_references(records: List[Dict[str, Any]], ref_fastas: List[str], k
     """
     def read_recs(p):
         recs=[];h='';s=[];o=0
-        with open(p) as f:
+        with open(p, encoding="utf-8", errors="replace") as f:
             for l in f:
                 l=l.strip()
                 if not l: continue

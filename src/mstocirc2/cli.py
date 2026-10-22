@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .cli_ui import CLIHelpFormatter, branded_description, emit_completion_banner, emit_startup_banner
 from .core import CLIUsageError, MStoCIRC2Error, configure_logging
+from .core.preflight import check_duplicate_cli_options, preflight_cli_args
 from .DEA.command_runner import add_dea_subparser
 from .integrated_pipeline import add_integrated_subparsers
 from .ORF.command_runner import add_orf_subparser
@@ -80,9 +81,15 @@ def main(argv: list[str] | None = None) -> int:
         argv = list(argv)
 
     parser = build_parser()
-    args = parser.parse_args(argv)
     configure_logging()
     emit_startup_banner()
+
+    try:
+        check_duplicate_cli_options(argv, parser)
+        args = parser.parse_args(argv)
+    except CLIUsageError as exc:
+        log.error(str(exc))
+        return 2
 
     runner: Runner | None = getattr(args, "runner", None)
     if runner is None:
@@ -91,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
 
     start_time = time.perf_counter()
     try:
+        preflight_cli_args(args)
         exit_code = int(runner(args) or 0)
         if exit_code == 0:
             output_path = _resolve_primary_output_path(args)
