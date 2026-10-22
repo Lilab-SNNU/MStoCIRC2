@@ -246,11 +246,16 @@ def extract_sequences(args: Any, out_circ_file: str) -> None:
     dic_id_gene = {}; dic_id_strand = {}; list_circ_unknown = []
 
     def write_cs_sequence(header_raw: str, seq: str, file_out: Any) -> None:
-        circ_id = header_raw.split(':')[0]
-        circ_gene = dic_id_gene.get(circ_id, 'none')
-        if circ_gene == 'NA': circ_gene = 'none'
-        if 'N' in seq: return
-        file_out.write('>' + circ_id + ':' + circ_gene + '\n' + seq + '\n')
+        raw_token = header_raw.strip().split(None, 1)[0] if header_raw.strip() else ""
+        circ_id = raw_token.replace("|", "_").split(":")[0]
+        circ_gene = dic_id_gene.get(circ_id, "none")
+        if circ_gene == "none":
+            circ_gene = dic_id_gene.get(raw_token.split(":")[0], "none")
+        if circ_gene == "NA":
+            circ_gene = "none"
+        if "N" in seq:
+            return
+        file_out.write(">" + circ_id + ":" + circ_gene + "\n" + seq + "\n")
 
 
     if use_sequence_mode:
