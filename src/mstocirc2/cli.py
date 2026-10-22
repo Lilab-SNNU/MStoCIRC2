@@ -82,7 +82,6 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = build_parser()
     configure_logging()
-    emit_startup_banner()
 
     try:
         check_duplicate_cli_options(argv, parser)
@@ -96,9 +95,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 2
 
-    start_time = time.perf_counter()
     try:
         preflight_cli_args(args)
+    except CLIUsageError as exc:
+        log.error(str(exc))
+        return 2
+
+    emit_startup_banner()
+    start_time = time.perf_counter()
+    try:
         exit_code = int(runner(args) or 0)
         if exit_code == 0:
             output_path = _resolve_primary_output_path(args)
