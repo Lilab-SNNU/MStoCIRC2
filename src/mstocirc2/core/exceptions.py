@@ -11,7 +11,3 @@ class CLIUsageError(MStoCIRC2Error):
 
 class DependencyError(MStoCIRC2Error):
     """Raised when an external dependency is missing."""
-
-
-class ExternalCommandError(MStoCIRC2Error):
-    """Raised when a delegated external command fails."""

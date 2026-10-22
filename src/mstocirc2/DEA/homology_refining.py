@@ -29,14 +29,6 @@ def is_circrna_search_id(pid: str, search_orf_ids: Set[str]) -> bool:
     return normalize_protein_id(pid) in search_orf_ids
 
 
-def looks_like_circrna_id(
-    pid: str,
-    search_orf_ids: Set[str],
-    circ_orf_base_ids: Set[str] | None = None,
-) -> bool:
-    return is_circrna_search_id(pid, search_orf_ids)
-
-
 def filter_peptides(
     peptide_df: pd.DataFrame,
     circ_ref_peptides: Set[str],

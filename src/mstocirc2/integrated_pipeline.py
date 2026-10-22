@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from .cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
+from .cli_ui import CLIHelpFormatter, branded_description, help_block
 from .core import CLIUsageError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir, module_file_log, module_log_context
 from .DEA.command_runner import run_differential_analysis
 from .DEA.workflow_strategy import STRATEGY_REGISTRY
@@ -22,18 +22,6 @@ _PIPELINE_RULE = "=" * 86
 _STAGE_RULE = "-" * 86
 _DEFAULT_ORGANISM = "hsa"
 _KEGG_REFERENCE_URL = "https://www.kegg.jp/kegg/tables/br08606.html"
-
-
-def _debug_report(hypothesis_id: str, location: str, msg: str, data: dict[str, object]) -> None:
-    log.debug("%s %s %s %s", hypothesis_id, location, msg, data)
-
-
-def _debug_search_tree(root: Path) -> dict[str, object]:
-    if not root.exists():
-        return {"exists": False}
-    files = sorted(str(path.relative_to(root)) for path in root.rglob("*") if path.is_file())
-    return {"exists": True, "files": files[:200], "file_count": len(files)}
-
 
 def _require_eval_result(eval_dir: Path) -> Path:
     circ_translation_evidence = eval_dir / "circ_translation_evidence.tsv"
@@ -58,10 +46,8 @@ def _require_eval_result(eval_dir: Path) -> Path:
 
     return circ_translation_evidence
 
-
 def _namespace_to_argv(namespace: argparse.Namespace, keys: Iterable[str]) -> dict[str, object]:
     return {key: getattr(namespace, key) for key in keys}
-
 
 def _manifest_rows(manifest_path: str | Path) -> list[list[str]]:
     rows: list[list[str]] = []
@@ -74,7 +60,6 @@ def _manifest_rows(manifest_path: str | Path) -> list[list[str]]:
     if not rows:
         raise CLIUsageError(f"Manifest file is empty: '{manifest_path}'.")
     return rows
-
 
 def detect_manifest_data_type(manifest_path: str | Path) -> str:
     values = []
@@ -97,7 +82,6 @@ def detect_manifest_data_type(manifest_path: str | Path) -> str:
         )
     return data_type
 
-
 def build_design_from_manifest(manifest_path: str | Path, output_path: str | Path) -> Path:
     rows = _manifest_rows(manifest_path)
     out_path = Path(output_path)
@@ -118,7 +102,6 @@ def build_design_from_manifest(manifest_path: str | Path, output_path: str | Pat
                 )
             writer.writerow([sample_name, row[1]])
     return out_path
-
 
 def build_design_from_experiment_annotation(
     annotation_path: str | Path,
@@ -163,7 +146,6 @@ def build_design_from_experiment_annotation(
         writer.writerows(rows)
     return out_path
 
-
 def _manifest_conditions(manifest_path: str | Path) -> list[str]:
     conditions: list[str] = []
     for row in _manifest_rows(manifest_path):
@@ -172,13 +154,11 @@ def _manifest_conditions(manifest_path: str | Path) -> list[str]:
         conditions.append(row[1])
     return sorted(set(conditions))
 
-
 def resolve_workflow_path(workflow: str | None, manifest: str, command_name: str) -> str:
     if workflow:
         return workflow
     data_type = detect_manifest_data_type(manifest)
     return str(default_workflow_for_command(data_type, command_name))
-
 
 def _find_existing(paths: Sequence[Path]) -> Path | None:
     for path in paths:
@@ -186,28 +166,11 @@ def _find_existing(paths: Sequence[Path]) -> Path | None:
             return path
     return None
 
-
 def discover_fragpipe_peptide_table(search_dir: str | Path, prefer_quant: bool = False) -> Path:
     root = Path(search_dir)
-    _debug_report(
-        "A",
-        "integrated_pipeline.discover_fragpipe_peptide_table:entry",
-        "[DEBUG] scanning FragPipe outputs for peptide table",
-        {
-            "search_dir": str(root),
-            "prefer_quant": prefer_quant,
-            "tree": _debug_search_tree(root),
-        },
-    )
     if prefer_quant:
         dia_path = root / "dia-quant-output" / "report.pr_matrix.tsv"
         if dia_path.exists():
-            _debug_report(
-                "E",
-                "integrated_pipeline.discover_fragpipe_peptide_table:dia",
-                "[DEBUG] selected DIA quantitative matrix",
-                {"selected": str(dia_path)},
-            )
             return dia_path
 
     candidates: list[Path] = []
@@ -231,32 +194,11 @@ def discover_fragpipe_peptide_table(search_dir: str | Path, prefer_quant: bool =
     if combined.exists() or direct.exists():
         found = _find_existing(candidates)
         if found is not None:
-            _debug_report(
-                "A",
-                "integrated_pipeline.discover_fragpipe_peptide_table:direct",
-                "[DEBUG] selected root-level peptide table",
-                {"selected": str(found), "candidates": [str(path) for path in candidates]},
-            )
             return found
 
     if len(grouped_candidates) == 1:
-        _debug_report(
-            "A",
-            "integrated_pipeline.discover_fragpipe_peptide_table:grouped",
-            "[DEBUG] selected grouped peptide table",
-            {
-                "selected": str(grouped_candidates[0]),
-                "grouped_candidates": [str(path) for path in grouped_candidates],
-            },
-        )
         return grouped_candidates[0]
     if len(grouped_candidates) > 1:
-        _debug_report(
-            "A",
-            "integrated_pipeline.discover_fragpipe_peptide_table:ambiguous",
-            "[DEBUG] multiple grouped peptide tables found without combined table",
-            {"grouped_candidates": [str(path) for path in grouped_candidates]},
-        )
         raise CLIUsageError(
             f"Found multiple grouped FragPipe peptide tables under '{root}' but no "
             "`combined_peptide.tsv`. Please provide a workflow/output layout that produces "
@@ -265,38 +207,19 @@ def discover_fragpipe_peptide_table(search_dir: str | Path, prefer_quant: bool =
 
     found = _find_existing(candidates)
     if found is None:
-        _debug_report(
-            "A",
-            "integrated_pipeline.discover_fragpipe_peptide_table:missing",
-            "[DEBUG] no peptide table discovered",
-            {
-                "search_dir": str(root),
-                "candidates": [str(path) for path in candidates],
-                "grouped_candidates": [str(path) for path in grouped_candidates],
-            },
-        )
         raise CLIUsageError(
             f"Could not locate a FragPipe peptide table under '{root}'. "
             "Expected `combined_peptide.tsv`, `peptide.tsv`, or `dia-quant-output/report.pr_matrix.tsv`."
         )
-    _debug_report(
-        "A",
-        "integrated_pipeline.discover_fragpipe_peptide_table:fallback",
-        "[DEBUG] selected fallback peptide table",
-        {"selected": str(found)},
-    )
     return found
-
 
 def _resolve_stage_output(parent: Path, explicit: str | None, default_name: str) -> str:
     if explicit:
         return explicit
     return str(parent / default_name)
 
-
 def _as_absolute_path(value: str | Path) -> Path:
     return Path(value).expanduser().resolve()
-
 
 def _prepare_runtime_input_path(stage_outdir: str | Path, filename: str) -> Path:
     stage_dir = Path(stage_outdir)
@@ -304,14 +227,12 @@ def _prepare_runtime_input_path(stage_outdir: str | Path, filename: str) -> Path
     runtime_dir.mkdir(parents=True, exist_ok=True)
     return runtime_dir / filename
 
-
 def _log_stage_banner(stage_number: int, stage_total: int, stage_name: str, output_dir: str | Path) -> None:
     stage_output = _as_absolute_path(output_dir)
     log.info(_STAGE_RULE)
     log.info("Stage %d/%d START | %s", stage_number, stage_total, stage_name)
     log.info("Output            | %s", stage_output)
     log.info(_STAGE_RULE)
-
 
 def _log_stage_complete(
     stage_number: int,
@@ -328,7 +249,6 @@ def _log_stage_complete(
         log.info("Key Result        | %s", _as_absolute_path(key_result))
     log.info(_STAGE_RULE)
 
-
 def _log_pipeline_start(pipeline_name: str, root_out: Path, workflow: str, manifest: str) -> None:
     log.info(_PIPELINE_RULE)
     log.info("Pipeline | %s", pipeline_name)
@@ -337,13 +257,11 @@ def _log_pipeline_start(pipeline_name: str, root_out: Path, workflow: str, manif
     log.info("Workflow | %s", _as_absolute_path(workflow))
     log.info(_PIPELINE_RULE)
 
-
 def _canonical_protein_refs(args: argparse.Namespace) -> list[str]:
     value = args.canonical_protein
     if isinstance(value, list):
         return [str(item) for item in value]
     return [str(value)]
-
 
 def _canonical_protein_fasta(args: argparse.Namespace) -> str:
     refs = _canonical_protein_refs(args)
@@ -353,7 +271,6 @@ def _canonical_protein_fasta(args: argparse.Namespace) -> str:
             "because the same reference is reused by FragPipe and translation evaluation."
         )
     return refs[0]
-
 
 def _preflight_integrated_search_runtime(args: argparse.Namespace) -> None:
     runtime = resolve_search_runtime(
@@ -365,7 +282,6 @@ def _preflight_integrated_search_runtime(args: argparse.Namespace) -> None:
     )
     if not getattr(args, "python_bin", "").strip():
         args.python_bin = runtime.python_bin
-
 
 def _run_orf_stage(args: argparse.Namespace, output_dir: str) -> Path:
     orf_args = argparse.Namespace(
@@ -392,24 +308,12 @@ def _run_orf_stage(args: argparse.Namespace, output_dir: str) -> Path:
         raise MStoCIRC2Error(f"ORF stage failed with exit code {exit_code}.")
     return Path(output_dir)
 
-
 def _run_search_stage(
     args: argparse.Namespace,
     circ_orf_path: str,
     search_outdir: str,
     workflow: str,
 ) -> Path:
-    _debug_report(
-        "B",
-        "integrated_pipeline._run_search_stage:before",
-        "[DEBUG] entering search stage",
-        {
-            "circ_orf_path": circ_orf_path,
-            "search_outdir": search_outdir,
-            "workflow": workflow,
-            "manifest": args.manifest,
-        },
-    )
     search_args = argparse.Namespace(
         circ_orf=circ_orf_path,
         linear_protein=_canonical_protein_fasta(args),
@@ -422,20 +326,9 @@ def _run_search_stage(
         fragpipe_bin=args.fragpipe_bin,
     )
     exit_code = run_search(search_args)
-    _debug_report(
-        "B",
-        "integrated_pipeline._run_search_stage:after",
-        "[DEBUG] search stage returned",
-        {
-            "exit_code": exit_code,
-            "search_outdir": search_outdir,
-            "tree": _debug_search_tree(Path(search_outdir)),
-        },
-    )
     if exit_code:
         raise MStoCIRC2Error(f"FragPipe stage failed with exit code {exit_code}.")
     return Path(search_outdir)
-
 
 def _run_eval_stage(
     args: argparse.Namespace,
@@ -451,16 +344,6 @@ def _run_eval_stage(
             "Integrated translation evaluation requires `combined_peptide.tsv` or `peptide.tsv`. "
             f"Details: {exc}"
         ) from exc
-    _debug_report(
-        "A",
-        "integrated_pipeline._run_eval_stage:selected_peptide",
-        "[DEBUG] eval stage selected peptide table",
-        {
-            "search_dir": str(search_dir),
-            "peptide_table": str(peptide_table),
-            "eval_outdir": eval_outdir,
-        },
-    )
     circ_info_path = orf_dir / "circ_info_omit.gff"
     eval_args = argparse.Namespace(
         circ_file_input=None,
@@ -481,7 +364,6 @@ def _run_eval_stage(
     _require_eval_result(eval_dir)
     return eval_dir
 
-
 def _run_dea_stage(
     args: argparse.Namespace,
     search_dir: Path,
@@ -501,22 +383,10 @@ def _run_dea_stage(
             annotation_path,
             _prepare_runtime_input_path(dea_dir, "design.from_annotation.tsv"),
         )
-        _debug_report(
-            "C",
-            "integrated_pipeline._run_dea_stage:design_annotation",
-            "[DEBUG] DEA stage selected DIA experiment annotation for design reconstruction",
-            {"annotation_path": str(annotation_path), "design_path": str(design_path)},
-        )
     else:
         design_path = build_design_from_manifest(
             args.manifest,
             _prepare_runtime_input_path(dea_dir, "design.from_manifest.tsv"),
-        )
-        _debug_report(
-            "C",
-            "integrated_pipeline._run_dea_stage:design_manifest",
-            "[DEBUG] DEA stage selected manifest for design reconstruction",
-            {"manifest": args.manifest, "design_path": str(design_path)},
         )
     dea_args = argparse.Namespace(
         peptide_matrix=str(peptide_matrix),
@@ -531,7 +401,6 @@ def _run_dea_stage(
     if exit_code:
         raise MStoCIRC2Error(f"Differential expression stage failed with exit code {exit_code}.")
     return Path(dea_outdir)
-
 
 def run_non_quant_pipeline(args: argparse.Namespace) -> int:
     if args.output_dir and str(args.output_dir).strip():
@@ -569,7 +438,6 @@ def run_non_quant_pipeline(args: argparse.Namespace) -> int:
         )
         _log_stage_complete(3, 3, "Eval", eval_dir, eval_dir / "circ_translation_evidence.tsv")
     return 0
-
 
 def run_quant_pipeline(args: argparse.Namespace) -> int:
     conditions = _manifest_conditions(args.manifest)
@@ -622,12 +490,6 @@ def run_quant_pipeline(args: argparse.Namespace) -> int:
                 (skip_dir / "dea_skipped.txt").write_text(message + "\n", encoding="utf-8")
                 log.warning(message)
             _log_stage_complete(4, 4, "DEA", skip_dir, skip_dir / "dea_skipped.txt")
-            _debug_report(
-                "C",
-                "integrated_pipeline.run_quant_pipeline:skip_dea",
-                "[DEBUG] skipping DEA because fewer than two groups were detected",
-                {"conditions": conditions, "dea_dir": str(skip_dir)},
-            )
             return 0
         dea_dir = _run_dea_stage(
             args,
@@ -637,7 +499,6 @@ def run_quant_pipeline(args: argparse.Namespace) -> int:
         )
         _log_stage_complete(4, 4, "DEA", dea_dir, dea_dir / "run_metadata.json")
     return 0
-
 
 def _add_orf_inputs(parser: argparse.ArgumentParser) -> None:
     req = parser.add_argument_group("ORF inputs")
@@ -663,7 +524,6 @@ def _add_orf_inputs(parser: argparse.ArgumentParser) -> None:
     opt.add_argument("-ml", "--min-orf-len", dest="min_orf_len", metavar="<INT>", type=int, default=6, help="Minimum amino-acid length retained after ORF translation. Valid range: value >= 1. Default: 6.")
     opt.add_argument("-fl", "--flank-aa-len", dest="flank_aa_len", metavar="<INT>", type=int, default=24, help="Flanking amino-acid window applied during BSJ-aware truncation. Valid range: value >= 0. Default: 24.")
     opt.add_argument("-sc", "--start-codon", dest="start_codon", metavar="<CODON_LIST>", default=None, help="Comma-separated DNA start codons used for ORF prediction, for example 'ATG,TTG,CTG,GTG'. Default: ATG,TTG,CTG,GTG.")
-
 
 def _add_fragpipe_inputs(parser: argparse.ArgumentParser) -> None:
     grp = parser.add_argument_group("FragPipe inputs")
@@ -698,7 +558,6 @@ def _add_fragpipe_inputs(parser: argparse.ArgumentParser) -> None:
         ),
     )
 
-
 def _add_eval_predictor_inputs(parser: argparse.ArgumentParser) -> None:
     grp = parser.add_argument_group("Translation evaluation settings")
     grp.add_argument(
@@ -716,13 +575,11 @@ def _add_eval_predictor_inputs(parser: argparse.ArgumentParser) -> None:
         help="DeepCIP Python. Default: the current MStoCIRC2 Python or 'MSTOCIRC2_DEEPCIP_PYTHON'.",
     )
 
-
 def _add_dea_inputs(parser: argparse.ArgumentParser) -> None:
     grp = parser.add_argument_group("DEA settings")
     grp.add_argument("-st", "--strategy", metavar="<NAME>", default="generic", help=f"DEA strategy preset controlling matrix interpretation, imputation, and statistical backend. Supported values: {', '.join(sorted(STRATEGY_REGISTRY.keys()))}. Default: generic.")
     grp.add_argument("-ap", "--use-adj-pvalue", action="store_true", help="Use the adjusted P-value column (BH FDR) instead of the raw P-value column when reporting significance. Default: False.")
     grp.add_argument("-org", "--organism", metavar="<ABBR>", default=_DEFAULT_ORGANISM, help=f"KEGG organism abbreviation used for enrichment, for example 'hsa', 'mmu', or 'ath'. Default: {_DEFAULT_ORGANISM} (Homo sapiens). Values must come from the bundled KEGG BR08606 registry. See {_KEGG_REFERENCE_URL}.")
-
 
 def add_integrated_subparsers(subparsers: argparse._SubParsersAction) -> None:
     nonquant_epilog = help_block(

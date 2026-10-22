@@ -1,10 +1,8 @@
-import os
 import re
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Set, Any, Tuple, Optional
 from Bio import SeqIO
-from Bio.Seq import Seq
 from Bio.Seq import reverse_complement
 import logging
 from ..core import DependencyError

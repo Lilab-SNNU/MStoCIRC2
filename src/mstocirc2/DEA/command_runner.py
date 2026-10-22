@@ -6,7 +6,6 @@ import logging
 import shutil
 import time
 from pathlib import Path
-import numpy as np
 import pandas as pd
 from ..cli_ui import CLIHelpFormatter, branded_description, help_block, join_blocks
 from ..core import CLIUsageError, DependencyError, MStoCIRC2Error, ensure_directory, make_default_module_output_dir, module_file_log

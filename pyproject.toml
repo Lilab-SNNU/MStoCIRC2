@@ -32,7 +32,6 @@ dependencies = [
     "matplotlib>=3.6.3,<4",
     "numpy>=1.23.2,<3",
     "pandas>=2.2.3,<3",
-    "Pillow>=10.2.0,<12",
     "scipy>=1.11.4,<2",
     "torch>=2.3.1,<3",
 ]
