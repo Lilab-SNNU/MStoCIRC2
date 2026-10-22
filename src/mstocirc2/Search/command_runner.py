@@ -43,7 +43,12 @@ def _walk_for_diann_executable(root: Path) -> Path | None:
     return None
 
 
-def _detect_manifest_data_type(manifest_path: str) -> str:
+def detect_manifest_data_type(manifest_path: str | Path) -> str:
+    """Infer acquisition mode from manifest column 4.
+
+    Pure DDA → ``DDA``. Any DIA row (including mixed DDA+DIA) → ``DIA``,
+    so FragPipe uses the DIA workflow and DIA input requirements.
+    """
     values: set[str] = set()
     with Path(manifest_path).open("r", encoding="utf-8", errors="ignore", newline="") as handle:
         reader = csv.reader(handle, delimiter="\t")
@@ -57,16 +62,18 @@ def _detect_manifest_data_type(manifest_path: str) -> str:
         raise CLIUsageError(
             "Unable to infer data type from manifest. Ensure column 4 contains DDA or DIA."
         )
-    if len(values) > 1:
+    unsupported = sorted(values - {"DDA", "DIA"})
+    if unsupported:
         raise CLIUsageError(
-            f"Manifest mixes data types {sorted(values)}. Use a single acquisition mode per run."
+            f"Unsupported manifest data type(s) {unsupported}. Expected 'DDA' or 'DIA'."
         )
-    data_type = values.pop()
-    if data_type not in {"DDA", "DIA"}:
-        raise CLIUsageError(
-            f"Unsupported manifest data type '{data_type}'. Expected 'DDA' or 'DIA'."
+    if values == {"DDA"}:
+        return "DDA"
+    if "DDA" in values and "DIA" in values:
+        log.info(
+            "Manifest contains both DDA and DIA; using DIA workflow and DIA input requirements."
         )
-    return data_type
+    return "DIA"
 
 
 def _normalize_manifest_for_fragpipe(manifest_path: str, output_dir: str | Path) -> Path:
@@ -140,7 +147,7 @@ def _resolve_search_workflow(
 ) -> str:
     if workflow:
         return workflow
-    data_type = _detect_manifest_data_type(manifest)
+    data_type = detect_manifest_data_type(manifest)
     return str(default_workflow_for_command(data_type, "search"))
 
 
@@ -238,7 +245,7 @@ def resolve_search_runtime(
     diann_bin: str | None,
     python_bin: str | None,
 ) -> SearchRuntime:
-    data_type = _detect_manifest_data_type(manifest)
+    data_type = detect_manifest_data_type(manifest)
     if not fragpipe_bin:
         raise CLIUsageError(
             "Missing required '--fragpipe-bin'. Provide the executable from your local FragPipe "

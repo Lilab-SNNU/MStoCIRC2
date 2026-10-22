@@ -14,7 +14,7 @@ from .DEA.command_runner import run_differential_analysis
 from .DEA.workflow_strategy import STRATEGY_REGISTRY
 from .fragpipe_workflows import default_workflow_for_command
 from .ORF.command_runner import run_orf_prediction
-from .Search.command_runner import resolve_search_runtime, run_search
+from .Search.command_runner import detect_manifest_data_type, resolve_search_runtime, run_search
 from .Eval.command_runner import run_eval
 
 log = logging.getLogger(__name__)
@@ -60,27 +60,6 @@ def _manifest_rows(manifest_path: str | Path) -> list[list[str]]:
     if not rows:
         raise CLIUsageError(f"Manifest file is empty: '{manifest_path}'.")
     return rows
-
-def detect_manifest_data_type(manifest_path: str | Path) -> str:
-    values = []
-    for row in _manifest_rows(manifest_path):
-        if len(row) >= 4 and row[3]:
-            values.append(row[3].upper())
-    if not values:
-        raise CLIUsageError(
-            "Unable to infer data type from manifest. Ensure column 4 contains DDA or DIA."
-        )
-    normalized = set(values)
-    if len(normalized) > 1:
-        raise CLIUsageError(
-            f"Manifest mixes data types {sorted(normalized)}. Use a single acquisition mode per run."
-        )
-    data_type = normalized.pop()
-    if data_type not in {"DDA", "DIA"}:
-        raise CLIUsageError(
-            f"Unsupported manifest data type '{data_type}'. Expected 'DDA' or 'DIA'."
-        )
-    return data_type
 
 def build_design_from_manifest(manifest_path: str | Path, output_path: str | Path) -> Path:
     rows = _manifest_rows(manifest_path)
